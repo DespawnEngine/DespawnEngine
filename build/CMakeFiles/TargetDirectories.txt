@@ -1,3 +1,0 @@
-C:/Users/ethan/Documents/GitHub/DespawnEngine/build/CMakeFiles/DespawnEngine.dir
-C:/Users/ethan/Documents/GitHub/DespawnEngine/build/CMakeFiles/ALL_BUILD.dir
-C:/Users/ethan/Documents/GitHub/DespawnEngine/build/CMakeFiles/ZERO_CHECK.dir
