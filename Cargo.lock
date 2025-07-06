@@ -3,6 +3,14 @@
 version = 4
 
 [[package]]
+name = "DespawnEngine"
+version = "0.1.0"
+dependencies = [
+ "vulkano",
+ "winit",
+]
+
+[[package]]
 name = "ab_glyph"
 version = "0.2.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1322,14 +1330,6 @@ name = "unicode-segmentation"
 version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f6ccf251212114b54433ec949fd6a7841275f9ada20dddd2f29e9ceea4501493"
-
-[[package]]
-name = "untitled2"
-version = "0.1.0"
-dependencies = [
- "vulkano",
- "winit",
-]
 
 [[package]]
 name = "version_check"
