@@ -17,6 +17,9 @@ use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{Icon, Window, WindowBuilder};
 use std::sync::Arc;
 use image::GenericImageView; // "image" crate uses this for loading images
+use vulkano::format::Format;
+use vulkano::image::ImageUsage;
+use vulkano::swapchain::CompositeAlpha;
 
 fn main() {
 
@@ -93,19 +96,28 @@ fn main() {
 
     // Create a swapchain (manages images for rendering and display)
     let (mut swapchain, images) = {
-        let caps = device
+        let surface_capabilities = device
             .physical_device()
             .surface_capabilities(&surface, Default::default())
             .unwrap();
-        let usage = caps.supported_usage_flags;
-        let alpha = caps.supported_composite_alpha.iter().next().unwrap();
-        let image_format = Some(
-            device
-                .physical_device()
-                .surface_formats(&surface, Default::default())
-                .unwrap()[0]
-                .0, // Pick first supported image format
-        );
+
+        let (image_format, _) = device
+            .physical_device()
+            .surface_formats(&surface, Default::default())
+            .unwrap()
+            .into_iter()
+            .min_by_key(|(format, _color_space)| match format {
+                Format::B8G8R8A8_SRGB => 0,
+                _ => 1,
+            })
+            .unwrap();
+
+        let composite_alpha = if surface_capabilities.supported_composite_alpha.opaque {
+            CompositeAlpha::Opaque
+        } else {
+            CompositeAlpha::PreMultiplied
+        };
+
         let window = surface.object().unwrap().downcast_ref::<Window>().unwrap();
         let image_extent: [u32; 2] = window.inner_size().into();
 
@@ -114,15 +126,18 @@ fn main() {
             device.clone(),
             surface.clone(),
             SwapchainCreateInfo {
-                min_image_count: caps.min_image_count,
-                image_format,
+                min_image_count: surface_capabilities.min_image_count,
+                image_format: Some(image_format),
                 image_extent,
-                image_usage: usage,
-                composite_alpha: alpha,
+                image_usage: ImageUsage {
+                    color_attachment: true,
+                    ..ImageUsage::empty()
+                },
+                composite_alpha,
                 ..Default::default()
             },
         )
-            .unwrap()
+        .unwrap()
     };
 
     let command_buffer_allocator = StandardCommandBufferAllocator::new(device.clone(), Default::default());
