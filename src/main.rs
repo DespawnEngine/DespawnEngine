@@ -45,9 +45,9 @@ fn main() {
     };
 
     let event_loop = EventLoop::new(); // Event loop to handle window events (like closing or resizing)
-    let surface = WindowBuilder::new() // Creates a window surface to render Vulkan output to
-        .with_title("Despawn Engine") // Add the window icon
-        .with_window_icon(Some(icon))
+    let surface = WindowBuilder::new()
+        .with_title(if cfg!(windows) { "Despawn Engine" } else { "DespawnEngine" })
+        .with_window_icon(if cfg!(windows) { Some(load_icon("assets/icon.png")) } else { None })
         .build_vk_surface(&event_loop, instance.clone())
         .unwrap();
 
