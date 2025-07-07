@@ -1,144 +1,38 @@
-// Importing necessary Vulkano and winit modules for Vulkan API and window creation. A lot easier to read than the last commit, but might need to be adjusted.
 use vulkano::command_buffer::allocator::StandardCommandBufferAllocator;
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, RenderPassBeginInfo, SubpassContents};
-use vulkano::device::physical::PhysicalDeviceType;
-use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, QueueCreateInfo};
-use vulkano::image::view::ImageView;
-use vulkano::image::{ImageAccess, SwapchainImage};
-use vulkano::instance::{Instance, InstanceCreateInfo};
-use vulkano::pipeline::graphics::viewport::Viewport;
-use vulkano::render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass};
-use vulkano::swapchain::{self, AcquireError, Swapchain, SwapchainCreateInfo, SwapchainCreationError, SwapchainPresentInfo};
+use vulkano::render_pass::Framebuffer;
+use vulkano::swapchain::{self, AcquireError, SwapchainCreateInfo, SwapchainPresentInfo};
 use vulkano::sync::{self, FlushError, GpuFuture};
-use vulkano::{Version, VulkanLibrary};
+use vulkano::pipeline::graphics::viewport::Viewport;
+use std::sync::Arc;
 use vulkano_win::VkSurfaceBuild;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
-use winit::window::{Icon, Window, WindowBuilder};
-use std::sync::Arc;
-use image::GenericImageView; // "image" crate uses this for loading images
-use vulkano::format::Format;
-use vulkano::image::ImageUsage;
-use vulkano::swapchain::CompositeAlpha;
+use crate::engine::vulkan::{create_instance, create_device_and_queue};
+use crate::engine::vswapchain::{create_swapchain, window_size_dependent_setup};
+use crate::engine::display::load_icon;
+
+// Importing DespawnEngine engine modules. Work in progress moving things to each other.
+mod engine {
+    pub mod vulkan;
+    pub mod vswapchain;
+    pub mod display;
+}
 
 fn main() {
-
     // Load the window icon. Mostly a test and this code should be removed soon (or just like, made better).
     let icon = load_icon("assets/icon.png");
 
-    // Create the main Vulkan instance
-    let instance = {
-        let library = VulkanLibrary::new().unwrap(); // Load Vulkan library
-        let extensions = vulkano_win::required_extensions(&library); // Get extensions needed for window display
-
-        // Create Vulkan instance with specific settings
-        Instance::new(
-            library,
-            InstanceCreateInfo {
-                enabled_extensions: extensions, // Enable window-related extensions
-                enumerate_portability: true, // Think this allows macOS compatibility (MoltenVK)
-                max_api_version: Some(Version::V1_1), // Uses Vulkan 1.1 or higher
-                ..Default::default() // Default settings for every other option
-            },
-        )
-            .unwrap()
-    };
-
     let event_loop = EventLoop::new(); // Event loop to handle window events (like closing or resizing)
-    let surface = WindowBuilder::new()
+    let instance = create_instance();
+    let surface = winit::window::WindowBuilder::new()
         .with_title(if cfg!(windows) { "Despawn Engine" } else { "DespawnEngine" })
         .with_window_icon(if cfg!(windows) { Some(load_icon("assets/icon.png")) } else { None })
         .build_vk_surface(&event_loop, instance.clone())
-        .unwrap();
+        .expect("Failed to create Vulkan surface");
 
-    let device_extensions = DeviceExtensions {
-        khr_swapchain: true, // Enable swapchain for rendering to window, still need to figure out what exactly this means
-        ..DeviceExtensions::empty()
-    };
-
-    let (physical_device, queue_family_index) = instance
-        .enumerate_physical_devices()
-        .unwrap()
-        .filter(|p| p.supported_extensions().contains(&device_extensions))
-        .filter_map(|p| {
-            p.queue_family_properties()
-                .iter()
-                .enumerate()
-                .position(|(i, q)| {
-                    q.queue_flags.graphics && p.surface_support(i as u32, &surface).unwrap_or(false)
-                })
-                .map(|i| (p, i as u32))
-        })
-        .min_by_key(|(p, _)| match p.properties().device_type { // Prefer discrete GPU over integrated, CPU, etc.
-            PhysicalDeviceType::DiscreteGpu => 0, // Dedicated GPU
-            PhysicalDeviceType::IntegratedGpu => 1, // Integrated graphics
-            PhysicalDeviceType::VirtualGpu => 2,
-            PhysicalDeviceType::Cpu => 3,
-            PhysicalDeviceType::Other => 4,
-            _ => 5,
-        })
-        .expect("No suitable physical device found");
-
-    let (device, mut queues) = Device::new(
-        physical_device,
-        DeviceCreateInfo {
-            enabled_extensions: device_extensions,
-            queue_create_infos: vec![QueueCreateInfo {
-                queue_family_index,
-                ..Default::default()
-            }],
-            ..Default::default()
-        },
-    )
-        .unwrap();
-
-    let queue = queues.next().unwrap();
-
-    // Create a swapchain (manages images for rendering and display)
-    let (mut swapchain, images) = {
-        let surface_capabilities = device
-            .physical_device()
-            .surface_capabilities(&surface, Default::default())
-            .unwrap();
-
-        let (image_format, _) = device
-            .physical_device()
-            .surface_formats(&surface, Default::default())
-            .unwrap()
-            .into_iter()
-            .min_by_key(|(format, _color_space)| match format {
-                Format::B8G8R8A8_SRGB => 0,
-                _ => 1,
-            })
-            .unwrap();
-
-        let composite_alpha = if surface_capabilities.supported_composite_alpha.opaque {
-            CompositeAlpha::Opaque
-        } else {
-            CompositeAlpha::PreMultiplied
-        };
-
-        let window = surface.object().unwrap().downcast_ref::<Window>().unwrap();
-        let image_extent: [u32; 2] = window.inner_size().into();
-
-        // New swapchain with specifics settings
-        Swapchain::new(
-            device.clone(),
-            surface.clone(),
-            SwapchainCreateInfo {
-                min_image_count: surface_capabilities.min_image_count,
-                image_format: Some(image_format),
-                image_extent,
-                image_usage: ImageUsage {
-                    color_attachment: true,
-                    ..ImageUsage::empty()
-                },
-                composite_alpha,
-                ..Default::default()
-            },
-        )
-        .unwrap()
-    };
+    let (device, queue) = create_device_and_queue(instance.clone(), surface.clone());
+    let (mut swapchain, images) = create_swapchain(device.clone(), surface.clone());
 
     let command_buffer_allocator = StandardCommandBufferAllocator::new(device.clone(), Default::default());
 
@@ -157,7 +51,7 @@ fn main() {
             depth_stencil: {}
         }
     )
-        .unwrap();
+        .expect("Failed to create render pass");
 
     let mut viewport = Viewport {
         origin: [0.0, 0.0],
@@ -171,6 +65,7 @@ fn main() {
     let mut previous_frame_end = Some(Box::new(sync::now(device.clone())) as Box<dyn GpuFuture>);
 
     event_loop.run(move |event, _, control_flow| {
+        *control_flow = ControlFlow::Poll; // Ensure continuous polling for events
         match event {
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
@@ -184,16 +79,16 @@ fn main() {
             } => {
                 recreate_swapchain = true;
             }
-            Event::RedrawEventsCleared => {
+            Event::MainEventsCleared => { // Changed from RedrawEventsCleared to MainEventsCleared for winit 0.27.3 compatibility
                 previous_frame_end
                     .as_mut()
                     .take()
-                    .unwrap()
+                    .expect("No previous frame end")
                     .cleanup_finished();
 
                 // Recreate swapchain if needed
                 if recreate_swapchain {
-                    let window = surface.object().unwrap().downcast_ref::<Window>().unwrap();
+                    let window = surface.object().unwrap().downcast_ref::<winit::window::Window>().unwrap();
                     let image_extent: [u32; 2] = window.inner_size().into();
 
                     // Recreate swapchain with new window size
@@ -202,7 +97,7 @@ fn main() {
                         ..swapchain.create_info()
                     }) {
                         Ok(r) => r,
-                        Err(SwapchainCreationError::ImageExtentNotSupported { .. }) => return,
+                        Err(vulkano::swapchain::SwapchainCreationError::ImageExtentNotSupported { .. }) => return,
                         Err(e) => panic!("Failed to recreate swapchain: {:?}", e),
                     };
 
@@ -234,7 +129,7 @@ fn main() {
                     queue.queue_family_index(),
                     CommandBufferUsage::OneTimeSubmit,
                 )
-                    .unwrap();
+                    .expect("Failed to create command buffer builder");
 
                 // Start rendering, clear the image, and end rendering
                 cmd_buffer_builder
@@ -245,19 +140,19 @@ fn main() {
                         },
                         SubpassContents::Inline, // Render directly
                     )
-                    .unwrap()
+                    .expect("Failed to begin render pass")
                     .end_render_pass()
-                    .unwrap();
+                    .expect("Failed to end render pass");
 
                 // Finalize command buffer
-                let command_buffer = cmd_buffer_builder.build().unwrap();
+                let command_buffer = cmd_buffer_builder.build().expect("Failed to build command buffer");
 
                 let future = previous_frame_end
                     .take()
-                    .unwrap()
+                    .expect("No previous frame end")
                     .join(acquire_future) // Wait for image to be ready
                     .then_execute(queue.clone(), command_buffer) // Run commands
-                    .unwrap()
+                    .expect("Failed to execute command buffer")
                     .then_swapchain_present(
                         queue.clone(),
                         SwapchainPresentInfo::swapchain_image_index(swapchain.clone(), image_index),
@@ -282,44 +177,4 @@ fn main() {
             _ => {}
         }
     });
-}
-
-// Helper function to create framebuffers based on window size
-fn window_size_dependent_setup(
-    images: &[Arc<SwapchainImage>], // Swapchain images
-    render_pass: Arc<RenderPass>, // RenderPass to hook
-    viewport: &mut Viewport, // Viewport to update
-) -> Vec<Arc<Framebuffer>> {
-
-    // Get image dimensions and update viewport
-    let dimensions = images[0].dimensions().width_height();
-    viewport.dimensions = [dimensions[0] as f32, dimensions[1] as f32];
-
-    // Create a framebuffer for each image
-    images
-        .iter()
-        .map(|image| {
-            let view = ImageView::new_default(image.clone()).unwrap();
-            Framebuffer::new(
-                render_pass.clone(),
-                FramebufferCreateInfo {
-                    attachments: vec![view],
-                    ..Default::default()
-                },
-            )
-                .unwrap()
-        })
-        .collect::<Vec<_>>()
-}
-
-// Helper function for loading an icon for the window icon. Code will likely be changed, but I wanted to experiment to learn more.
-fn load_icon(path: &str) -> Icon {
-    // Load the image
-    let image = image::open(path).expect("Failed to open icon file");
-
-    let (width, height) = image.dimensions();
-    let rgba = image.into_rgba8().into_raw(); // Convert to raw RGBA bytes
-
-    // Create winit Icon
-    Icon::from_rgba(rgba, width, height).expect("Failed to create icon")
 }
