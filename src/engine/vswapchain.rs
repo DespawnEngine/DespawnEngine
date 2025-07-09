@@ -38,6 +38,8 @@ pub fn create_swapchain(
     .unwrap()
 }
 
+// Creates framebuffers that link the render pass to the swapchain images.
+// This must be reran whenever the window size changes.
 pub fn window_size_dependent_setup(
     images: &[Arc<Image>],
     render_pass: Arc<RenderPass>,

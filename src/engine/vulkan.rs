@@ -17,6 +17,7 @@ pub fn create_instance(event_loop: &ActiveEventLoop) -> Arc<Instance> {
     Instance::new(
         library,
         InstanceCreateInfo {
+            // Required for compatibility with MoltenVK on macOS.
             flags: InstanceCreateFlags::ENUMERATE_PORTABILITY,
             enabled_extensions: required_extensions,
             ..Default::default()
@@ -25,6 +26,7 @@ pub fn create_instance(event_loop: &ActiveEventLoop) -> Arc<Instance> {
     .expect("Failed to create instance")
 }
 
+// Selects a suitable physical device (GPU) and creates a logical device to interface with it.
 pub fn create_device_and_queue(
     instance: Arc<Instance>,
     surface: Arc<Surface>,
@@ -34,10 +36,13 @@ pub fn create_device_and_queue(
         ..Default::default()
     };
 
+    // Select a physical device that supports our requirements.
     let (physical_device, queue_family_index) = instance
         .enumerate_physical_devices()
         .expect("Could not enumerate physical devices")
+        // Must support swapchains.
         .filter(|p| p.supported_extensions().contains(&device_extensions))
+        // Must have a queue family that supports graphics and can draw to our surface.
         .filter_map(|p| {
             p.queue_family_properties()
                 .iter()
@@ -48,6 +53,7 @@ pub fn create_device_and_queue(
                 })
                 .map(|(i, _)| (p.clone(), i as u32))
         })
+        // Prioritize device types: Discrete > Integrated > Virtual > CPU.
         .min_by_key(|(p, _)| match p.properties().device_type {
             PhysicalDeviceType::DiscreteGpu => 0,
             PhysicalDeviceType::IntegratedGpu => 1,
@@ -58,6 +64,7 @@ pub fn create_device_and_queue(
         })
         .expect("No suitable physical device found");
 
+    // Create a logical device and the command queues.
     let (device, mut queues) = Device::new(
         physical_device,
         DeviceCreateInfo {
