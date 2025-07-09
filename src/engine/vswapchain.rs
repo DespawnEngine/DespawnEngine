@@ -1,73 +1,53 @@
-use vulkano::device::Device;
-use vulkano::format::Format;
-use vulkano::image::view::ImageView;
-use vulkano::image::{ImageAccess, ImageUsage, SwapchainImage};
-use vulkano::render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass};
-use vulkano::swapchain::{Swapchain, SwapchainCreateInfo, CompositeAlpha};
-use vulkano::pipeline::graphics::viewport::Viewport;
 use std::sync::Arc;
-use winit::window::Window;
+use vulkano::{
+    device::Device,
+    image::{view::ImageView, Image, ImageUsage},
+    pipeline::graphics::viewport::Viewport,
+    render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass},
+    swapchain::{CompositeAlpha, Surface, Swapchain, SwapchainCreateInfo},
+};
 
-// Create a swapchain (manages images for rendering and display)
 pub fn create_swapchain(
     device: Arc<Device>,
-    surface: Arc<vulkano::swapchain::Surface>,
-) -> (Arc<Swapchain>, Vec<Arc<SwapchainImage>>) {
+    surface: Arc<Surface>,
+    image_extent: [u32; 2],
+) -> (Arc<Swapchain>, Vec<Arc<Image>>) {
     let surface_capabilities = device
         .physical_device()
         .surface_capabilities(&surface, Default::default())
         .unwrap();
 
-    let (image_format, _) = device
+    let image_format = device
         .physical_device()
         .surface_formats(&surface, Default::default())
-        .unwrap()
-        .into_iter()
-        .min_by_key(|(format, _color_space)| match format {
-            Format::B8G8R8A8_SRGB => 0,
-            _ => 1,
-        })
-        .unwrap();
+        .unwrap()[0]
+        .0;
 
-    let composite_alpha = if surface_capabilities.supported_composite_alpha.opaque {
-        CompositeAlpha::Opaque
-    } else {
-        CompositeAlpha::PreMultiplied
-    };
-
-    let window = surface.object().unwrap().downcast_ref::<Window>().unwrap();
-    let image_extent: [u32; 2] = window.inner_size().into();
-
-    // New swapchain with specifics settings
     Swapchain::new(
         device.clone(),
         surface.clone(),
         SwapchainCreateInfo {
-            min_image_count: surface_capabilities.min_image_count,
-            image_format: Some(image_format),
+            min_image_count: surface_capabilities.min_image_count.max(2),
+            image_format,
             image_extent,
-            image_usage: ImageUsage {
-                color_attachment: true,
-                ..ImageUsage::empty()
-            },
-            composite_alpha,
+            image_usage: ImageUsage::COLOR_ATTACHMENT,
+            composite_alpha: CompositeAlpha::Opaque,
             ..Default::default()
         },
-    ).unwrap()
+    )
+    .unwrap()
 }
 
-// Helper function to create framebuffers based on window size
+// Creates framebuffers that link the render pass to the swapchain images.
+// This must be reran whenever the window size changes.
 pub fn window_size_dependent_setup(
-    images: &[Arc<SwapchainImage>], // Swapchain images
-    render_pass: Arc<RenderPass>, // RenderPass to hook
-    viewport: &mut Viewport, // Viewport to update
-    ) -> Vec<Arc<Framebuffer>> {
+    images: &[Arc<Image>],
+    render_pass: Arc<RenderPass>,
+    viewport: &mut Viewport,
+) -> Vec<Arc<Framebuffer>> {
+    let dimensions = images[0].extent();
+    viewport.extent = [dimensions[0] as f32, dimensions[1] as f32];
 
-    // Get image dimensions and update viewport
-    let dimensions = images[0].dimensions().width_height();
-    viewport.dimensions = [dimensions[0] as f32, dimensions[1] as f32];
-
-    // Create a framebuffer for each image
     images
         .iter()
         .map(|image| {
@@ -78,7 +58,8 @@ pub fn window_size_dependent_setup(
                     attachments: vec![view],
                     ..Default::default()
                 },
-            ).unwrap()
+            )
+            .unwrap()
         })
         .collect::<Vec<_>>()
 }
