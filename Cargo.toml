@@ -5,7 +5,6 @@ edition = "2024"
 
 [dependencies]
 image = "0.25.6"
-vulkano = "0.32.3"
-vulkano-shaders = "0.32.0"
-vulkano-win = "0.32.0"
-winit = "0.27.3"
+vulkano = "0.35.1"
+vulkano-shaders = "0.35.0"
+winit = "0.30.11"

@@ -1,180 +1,261 @@
-use vulkano::command_buffer::allocator::StandardCommandBufferAllocator;
-use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, RenderPassBeginInfo, SubpassContents};
-use vulkano::render_pass::Framebuffer;
-use vulkano::swapchain::{self, AcquireError, SwapchainCreateInfo, SwapchainPresentInfo};
-use vulkano::sync::{self, FlushError, GpuFuture};
-use vulkano::pipeline::graphics::viewport::Viewport;
+use crate::engine::{
+    display::load_icon,
+    vswapchain::{create_swapchain, window_size_dependent_setup},
+    vulkan::{create_device_and_queue, create_instance},
+};
 use std::sync::Arc;
-use vulkano_win::VkSurfaceBuild;
-use winit::event::{Event, WindowEvent};
-use winit::event_loop::{ControlFlow, EventLoop};
-use crate::engine::vulkan::{create_instance, create_device_and_queue};
-use crate::engine::vswapchain::{create_swapchain, window_size_dependent_setup};
-use crate::engine::display::load_icon;
+use vulkano::{
+    command_buffer::{
+        allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage,
+        RenderPassBeginInfo, SubpassBeginInfo, SubpassContents, SubpassEndInfo,
+    },
+    image::Image,
+    pipeline::graphics::viewport::Viewport,
+    swapchain::{self},
+    sync::{self, GpuFuture},
+    Validated, VulkanError,
+};
+use winit::{
+    application::ApplicationHandler,
+    event::WindowEvent,
+    event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
+    window::Window,
+};
 
-// Importing DespawnEngine engine modules. Work in progress moving things to each other.
 mod engine {
-    pub mod vulkan;
-    pub mod vswapchain;
     pub mod display;
+    pub mod vswapchain;
+    pub mod vulkan;
 }
 
-fn main() {
-    // Load the window icon. Mostly a test and this code should be removed soon (or just like, made better).
-    let icon = load_icon("assets/icon.png");
+// Application state
+struct App {
+    window: Option<Arc<Window>>,
+    surface: Option<Arc<swapchain::Surface>>,
+    device: Option<Arc<vulkano::device::Device>>,
+    queue: Option<Arc<vulkano::device::Queue>>,
+    swapchain: Option<Arc<swapchain::Swapchain>>,
+    images: Option<Vec<Arc<Image>>>,
+    render_pass: Option<Arc<vulkano::render_pass::RenderPass>>,
+    viewport: Viewport,
+    framebuffers: Option<Vec<Arc<vulkano::render_pass::Framebuffer>>>,
+    recreate_swapchain: bool,
+    previous_frame_end: Option<Box<dyn GpuFuture>>,
+    command_buffer_allocator: Option<Arc<StandardCommandBufferAllocator>>,
+}
 
-    let event_loop = EventLoop::new(); // Event loop to handle window events (like closing or resizing)
-    let instance = create_instance();
-    let surface = winit::window::WindowBuilder::new()
-        .with_title(if cfg!(windows) { "Despawn Engine" } else { "DespawnEngine" })
-        .with_window_icon(if cfg!(windows) { Some(load_icon("assets/icon.png")) } else { None })
-        .build_vk_surface(&event_loop, instance.clone())
-        .expect("Failed to create Vulkan surface");
-
-    let (device, queue) = create_device_and_queue(instance.clone(), surface.clone());
-    let (mut swapchain, images) = create_swapchain(device.clone(), surface.clone());
-
-    let command_buffer_allocator = StandardCommandBufferAllocator::new(device.clone(), Default::default());
-
-    let render_pass = vulkano::single_pass_renderpass!(
-        device.clone(),
-        attachments: {
-            color: {
-                load: Clear,
-                store: Store,
-                format: swapchain.image_format(),
-                samples: 1,
-            }
-        },
-        pass: {
-            color: [color],
-            depth_stencil: {}
+impl Default for App {
+    fn default() -> Self {
+        Self {
+            window: None,
+            surface: None,
+            device: None,
+            queue: None,
+            swapchain: None,
+            images: None,
+            render_pass: None,
+            viewport: Viewport {
+                offset: [0.0, 0.0],
+                extent: [0.0, 0.0],
+                depth_range: 0.0..=1.0,
+            },
+            framebuffers: None,
+            recreate_swapchain: false,
+            previous_frame_end: None,
+            command_buffer_allocator: None,
         }
-    )
-        .expect("Failed to create render pass");
+    }
+}
 
-    let mut viewport = Viewport {
-        origin: [0.0, 0.0],
-        dimensions: [0.0, 0.0],
-        depth_range: 0.0..1.0,
-    };
+impl ApplicationHandler for App {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        let window = {
+            let window_attributes = Window::default_attributes()
+                .with_title("DespawnEngine")
+                .with_window_icon(Some(load_icon("assets/icon.png")));
+            Arc::new(event_loop.create_window(window_attributes).unwrap())
+        };
+        self.window = Some(window.clone());
 
-    let mut framebuffers = window_size_dependent_setup(&images, render_pass.clone(), &mut viewport);
+        let instance = create_instance(event_loop);
+        let surface = swapchain::Surface::from_window(instance.clone(), window.clone()).unwrap();
+        self.surface = Some(surface.clone());
 
-    let mut recreate_swapchain = false;
-    let mut previous_frame_end = Some(Box::new(sync::now(device.clone())) as Box<dyn GpuFuture>);
+        let (device, queue) = create_device_and_queue(instance, surface.clone());
+        self.device = Some(device.clone());
+        self.queue = Some(queue.clone());
 
-    event_loop.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Poll; // Ensure continuous polling for events
+        let (swapchain, images) =
+            create_swapchain(device.clone(), surface.clone(), window.inner_size().into());
+        self.swapchain = Some(swapchain.clone());
+        self.images = Some(images.clone());
+
+        let command_buffer_allocator =
+            Arc::new(StandardCommandBufferAllocator::new(device.clone(), Default::default()));
+        self.command_buffer_allocator = Some(command_buffer_allocator);
+
+        let render_pass = vulkano::single_pass_renderpass!(
+            device.clone(),
+            attachments: {
+                color: {
+                    format: swapchain.image_format(),
+                    samples: 1,
+                    load_op: Clear,
+                    store_op: Store,
+                }
+            },
+            pass: {
+                color: [color],
+                depth_stencil: {}
+            }
+        )
+        .unwrap();
+        self.render_pass = Some(render_pass.clone());
+
+        let framebuffers =
+            window_size_dependent_setup(&images, render_pass.clone(), &mut self.viewport);
+        self.framebuffers = Some(framebuffers);
+        self.recreate_swapchain = false;
+        self.previous_frame_end = Some(sync::now(device.clone()).boxed());
+    }
+
+    fn window_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        _window_id: winit::window::WindowId,
+        event: WindowEvent,
+    ) {
         match event {
-            Event::WindowEvent {
-                event: WindowEvent::CloseRequested,
-                ..
-            } => {
-                *control_flow = ControlFlow::Exit;
+            WindowEvent::CloseRequested => {
+                event_loop.exit();
             }
-            Event::WindowEvent {
-                event: WindowEvent::Resized(_),
-                ..
-            } => {
-                recreate_swapchain = true;
+            WindowEvent::Resized(_) => {
+                self.recreate_swapchain = true;
             }
-            Event::MainEventsCleared => { // Changed from RedrawEventsCleared to MainEventsCleared for winit 0.27.3 compatibility
-                previous_frame_end
-                    .as_mut()
-                    .take()
-                    .expect("No previous frame end")
-                    .cleanup_finished();
-
-                // Recreate swapchain if needed
-                if recreate_swapchain {
-                    let window = surface.object().unwrap().downcast_ref::<winit::window::Window>().unwrap();
-                    let image_extent: [u32; 2] = window.inner_size().into();
-
-                    // Recreate swapchain with new window size
-                    let (new_swapchain, new_images) = match swapchain.recreate(SwapchainCreateInfo {
-                        image_extent,
-                        ..swapchain.create_info()
-                    }) {
-                        Ok(r) => r,
-                        Err(vulkano::swapchain::SwapchainCreationError::ImageExtentNotSupported { .. }) => return,
-                        Err(e) => panic!("Failed to recreate swapchain: {:?}", e),
-                    };
-
-                    swapchain = new_swapchain; // Update swapchain
-                    framebuffers = window_size_dependent_setup(&new_images, render_pass.clone(), &mut viewport); // Recreate framebuffers for new images
-                    recreate_swapchain = false;
+            WindowEvent::RedrawRequested => {
+                if self.previous_frame_end.is_none() {
+                    return;
                 }
 
-                // Acquire next image from swapchain for rendering
-                let (image_index, suboptimal, acquire_future) = match swapchain::acquire_next_image(swapchain.clone(), None) {
-                    Ok(r) => r,
-                    Err(AcquireError::OutOfDate) => {
-                        recreate_swapchain = true; // Mark swapchain for recreation
+                let window = self.window.as_ref().unwrap();
+                let device = self.device.as_ref().unwrap();
+                let queue = self.queue.as_ref().unwrap();
+                let mut swapchain = self.swapchain.as_ref().unwrap().clone();
+                let render_pass = self.render_pass.as_ref().unwrap();
+                let command_buffer_allocator = self.command_buffer_allocator.as_ref().unwrap();
+
+                if self.recreate_swapchain {
+                    let image_extent: [u32; 2] = window.inner_size().into();
+                    if image_extent.contains(&0) {
                         return;
                     }
-                    Err(e) => panic!("Failed to acquire next image: {:?}", e),
-                };
-
-                // Recreate swapchain if not using ideal settings
-                if suboptimal {
-                    recreate_swapchain = true;
+                    let (new_swapchain, new_images) =
+                        match swapchain.recreate(swapchain::SwapchainCreateInfo {
+                            image_extent,
+                            ..swapchain.create_info()
+                        }) {
+                            Ok(r) => r,
+                            Err(e) => panic!("Failed to recreate swapchain: {e}"),
+                        };
+                    self.swapchain = Some(new_swapchain.clone());
+                    swapchain = new_swapchain;
+                    self.images = Some(new_images.clone());
+                    self.framebuffers = Some(window_size_dependent_setup(
+                        &new_images,
+                        render_pass.clone(),
+                        &mut self.viewport,
+                    ));
+                    self.recreate_swapchain = false;
                 }
 
-                // This is the color to make the window (light blue because it's kind of like the minecraft sky, vaguely)
-                let clear_values = vec![Some([0.0, 0.68, 1.0, 1.0].into())];
+                let framebuffers = self.framebuffers.as_ref().unwrap();
+                let mut previous_frame_end = self.previous_frame_end.take().unwrap();
+                previous_frame_end.cleanup_finished();
+
+                let (image_i, suboptimal, acquire_future) =
+                    match swapchain::acquire_next_image(swapchain.clone(), None)
+                        .map_err(Validated::unwrap)
+                    {
+                        Ok(r) => r,
+                        Err(VulkanError::OutOfDate) => {
+                            self.recreate_swapchain = true;
+                            self.previous_frame_end = Some(previous_frame_end);
+                            return;
+                        }
+                        Err(e) => panic!("failed to acquire next image: {e}"),
+                    };
+
+
+                if suboptimal {
+                    self.recreate_swapchain = true;
+                }
 
                 let mut cmd_buffer_builder = AutoCommandBufferBuilder::primary(
-                    &command_buffer_allocator,
+                    command_buffer_allocator.clone(),
                     queue.queue_family_index(),
                     CommandBufferUsage::OneTimeSubmit,
                 )
-                    .expect("Failed to create command buffer builder");
+                .unwrap();
 
-                // Start rendering, clear the image, and end rendering
                 cmd_buffer_builder
                     .begin_render_pass(
                         RenderPassBeginInfo {
-                            clear_values, // Clear with specified color (showing a color)
-                            ..RenderPassBeginInfo::framebuffer(framebuffers[image_index as usize].clone())
+                            clear_values: vec![Some([0.0, 0.68, 1.0, 1.0].into())],
+                            ..RenderPassBeginInfo::framebuffer(
+                                framebuffers[image_i as usize].clone(),
+                            )
                         },
-                        SubpassContents::Inline, // Render directly
+                        SubpassBeginInfo {
+                            contents: SubpassContents::Inline,
+                            ..Default::default()
+                        },
                     )
-                    .expect("Failed to begin render pass")
-                    .end_render_pass()
-                    .expect("Failed to end render pass");
+                    .unwrap()
+                    .end_render_pass(SubpassEndInfo::default())
+                    .unwrap();
 
-                // Finalize command buffer
-                let command_buffer = cmd_buffer_builder.build().expect("Failed to build command buffer");
-
+                let command_buffer = cmd_buffer_builder.build().unwrap();
                 let future = previous_frame_end
-                    .take()
-                    .expect("No previous frame end")
-                    .join(acquire_future) // Wait for image to be ready
-                    .then_execute(queue.clone(), command_buffer) // Run commands
-                    .expect("Failed to execute command buffer")
+                    .join(acquire_future)
+                    .then_execute(queue.clone(), command_buffer)
+                    .unwrap()
                     .then_swapchain_present(
                         queue.clone(),
-                        SwapchainPresentInfo::swapchain_image_index(swapchain.clone(), image_index),
+                        swapchain::SwapchainPresentInfo::swapchain_image_index(
+                            swapchain.clone(),
+                            image_i,
+                        ),
                     )
-                    .then_signal_fence_and_flush(); // Signal the completion
+                    .then_signal_fence_and_flush();
 
-                // Handle the result of GPU operations
-                match future {
+                match future.map_err(Validated::unwrap) {
                     Ok(future) => {
-                        previous_frame_end = Some(Box::new(future) as Box<_>);
+                        self.previous_frame_end = Some(future.boxed());
                     }
-                    Err(FlushError::OutOfDate) => {
-                        recreate_swapchain = true;
-                        previous_frame_end = Some(Box::new(sync::now(device.clone())) as Box<_>);
+                    Err(VulkanError::OutOfDate) => {
+                        self.recreate_swapchain = true;
+                        self.previous_frame_end = Some(sync::now(device.clone()).boxed());
                     }
                     Err(e) => {
-                        println!("Failed to flush future: {:?}", e);
-                        previous_frame_end = Some(Box::new(sync::now(device.clone())) as Box<_>);
+                        println!("failed to flush future: {e}");
+                        self.previous_frame_end = Some(sync::now(device.clone()).boxed());
                     }
                 }
             }
-            _ => {}
+            _ => (),
         }
-    });
+    }
+
+    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+        if let Some(window) = &self.window {
+            window.request_redraw();
+        }
+    }
+}
+
+fn main() {
+    let event_loop = EventLoop::new().unwrap();
+    event_loop.set_control_flow(ControlFlow::Poll);
+    let mut app = App::default();
+    let _ = event_loop.run_app(&mut app);
 }
