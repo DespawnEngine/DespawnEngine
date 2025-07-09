@@ -67,7 +67,7 @@ impl ApplicationHandler for App {
         // Create the window
         let window = {
             let window_attributes = Window::default_attributes()
-                .with_title("DespawnEngine")
+                .with_title("Despawn Engine")
                 .with_window_icon(Some(load_icon("assets/icon.png")));
             Arc::new(event_loop.create_window(window_attributes).unwrap())
         };
