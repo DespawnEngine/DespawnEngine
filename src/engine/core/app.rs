@@ -16,7 +16,7 @@ use vulkano::{
     sync::{self, GpuFuture},
     Validated, VulkanError,
 };
-use vulkano::memory::allocator::{AllocationCreateInfo, StandardMemoryAllocator};
+use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
 use vulkano::pipeline::{GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo};
 use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
 use vulkano::pipeline::graphics::{
@@ -129,7 +129,7 @@ impl ApplicationHandler for App {
                 ..Default::default()
             },
             AllocationCreateInfo {
-                memory_type_filter: vulkano::memory::allocator::MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                memory_type_filter: MemoryTypeFilter::PREFER_HOST | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
                 ..Default::default()
             },
             vertex_data,
