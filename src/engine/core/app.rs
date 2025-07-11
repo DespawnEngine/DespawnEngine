@@ -129,7 +129,7 @@ impl ApplicationHandler for App {
                 ..Default::default()
             },
             AllocationCreateInfo {
-                memory_type_filter: vulkano::memory::allocator::MemoryTypeFilter::PREFER_HOST,
+                memory_type_filter: vulkano::memory::allocator::MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
                 ..Default::default()
             },
             vertex_data,
