@@ -1,8 +1,9 @@
 use crate::engine::{
-    display::load_icon,
-    vswapchain::{create_swapchain, window_size_dependent_setup},
-    vulkan::{create_device_and_queue, create_instance},
+    display::load_icon, vswapchain::{create_swapchain, window_size_dependent_setup}, vulkan::{create_device_and_queue, create_instance}
 };
+
+use crate::arguments;
+
 use std::sync::Arc;
 use vulkano::{
     command_buffer::{
@@ -68,6 +69,7 @@ impl ApplicationHandler for App {
         let window = {
             let window_attributes = Window::default_attributes()
                 .with_title("Despawn Engine")
+                .with_decorations(arguments::use_decorations())
                 .with_window_icon(Some(load_icon("assets/icon.png")));
             Arc::new(event_loop.create_window(window_attributes).unwrap())
         };
