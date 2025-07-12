@@ -6,22 +6,38 @@ use crate::arguments;
 
 use std::sync::Arc;
 use vulkano::{
+    buffer::{Buffer, BufferCreateInfo, Subbuffer, BufferUsage},
     command_buffer::{
         allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage,
         RenderPassBeginInfo, SubpassBeginInfo, SubpassContents, SubpassEndInfo,
     },
     image::Image,
-    pipeline::graphics::viewport::Viewport,
+    pipeline::graphics::viewport::{Viewport, ViewportState},
     swapchain::{self},
     sync::{self, GpuFuture},
     Validated, VulkanError,
 };
+use vulkano::format::Format;
+use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
+use vulkano::pipeline::{GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo};
+use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
+use vulkano::pipeline::graphics::{
+    input_assembly::InputAssemblyState,
+    color_blend::ColorBlendState,
+    rasterization::RasterizationState,
+    multisample::MultisampleState,
+};
+use vulkano::pipeline::graphics::color_blend::ColorBlendAttachmentState;
+use vulkano::pipeline::graphics::vertex_input::{Vertex, VertexDefinition};
+use vulkano::pipeline::layout::PipelineDescriptorSetLayoutCreateInfo;
+use vulkano::render_pass::Subpass;
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
     event_loop::ActiveEventLoop,
     window::Window,
 };
+use crate::engine::vertex::MyVertex;
 
 // `App` holds the state of the application, including all Vulkan objects that need to persist between frames.
 pub struct App {
@@ -37,6 +53,8 @@ pub struct App {
     recreate_swapchain: bool,
     previous_frame_end: Option<Box<dyn GpuFuture>>,
     command_buffer_allocator: Option<Arc<StandardCommandBufferAllocator>>,
+    vertex_buffer: Option<Subbuffer<[MyVertex]>>,
+    pipeline: Option<Arc<GraphicsPipeline>>,
 }
 
 impl Default for App {
@@ -58,6 +76,8 @@ impl Default for App {
             recreate_swapchain: false,
             previous_frame_end: None,
             command_buffer_allocator: None,
+            vertex_buffer: None,
+            pipeline: None,
         }
     }
 }
@@ -93,12 +113,41 @@ impl ApplicationHandler for App {
             Arc::new(StandardCommandBufferAllocator::new(device.clone(), Default::default()));
         self.command_buffer_allocator = Some(command_buffer_allocator);
 
+
+        // Creating vertices for the triangle.
+        let vertex_data = [
+            MyVertex { position: [-0.5, -0.5], color: [1.0, 0.0, 0.0] },
+            MyVertex { position: [0.0, 0.5], color: [0.0, 1.0, 0.0] },
+            MyVertex { position: [0.5, -0.5], color: [0.0, 0.0, 1.0] },
+        ];
+
+        let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(
+            self.device.as_ref().unwrap().clone(),
+        ));
+
+        let vertex_buffer: Subbuffer<[MyVertex]> = Buffer::from_iter(
+            memory_allocator.clone(),
+            BufferCreateInfo {
+                usage: BufferUsage::VERTEX_BUFFER,
+                ..Default::default()
+            },
+            AllocationCreateInfo {
+                memory_type_filter: MemoryTypeFilter::PREFER_HOST | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                ..Default::default()
+            },
+            vertex_data,
+        ).unwrap();
+
+        self.vertex_buffer = Some(vertex_buffer);
+        // End of creating vertices for the triangle.
+
+
         // Define a simple render pass with one color attachment
         let render_pass = vulkano::single_pass_renderpass!(
             device.clone(),
             attachments: {
                 color: {
-                    format: swapchain.image_format(),
+                    format: Format::R8G8B8A8_SRGB,
                     samples: 1,
                     load_op: Clear,
                     store_op: Store,
@@ -111,6 +160,77 @@ impl ApplicationHandler for App {
         )
         .unwrap();
         self.render_pass = Some(render_pass.clone());
+
+        // Loading the vertex and fragment shaders
+        mod vs {
+            vulkano_shaders::shader! {
+        ty: "vertex",
+        path: "assets/shaders/first_triangle/vertex.glsl"
+        }
+        }
+        mod fs {
+            vulkano_shaders::shader! {
+        ty: "fragment",
+        path: "assets/shaders/first_triangle/fragment.glsl"
+        }
+        }
+
+        let vs = vs::load(device.clone()).expect("failed to create shader module");
+        let fs = fs::load(device.clone()).expect("failed to create shader module");
+
+        let viewport = Viewport {
+            offset: [0.0, 0.0],
+            extent: [1024.0, 1024.0],
+            depth_range: 0.0..=1.0,
+        };
+
+        // Creating the graphics pipeline
+        let pipeline = {
+            let vs = vs.entry_point("main").unwrap();
+            let fs = fs.entry_point("main").unwrap();
+
+            let vertex_input_state = MyVertex::per_vertex().definition(&vs).unwrap();
+
+            let stages = [
+                PipelineShaderStageCreateInfo::new(vs),
+                PipelineShaderStageCreateInfo::new(fs),
+            ];
+
+            let layout = PipelineLayout::new(
+                device.clone(),
+                PipelineDescriptorSetLayoutCreateInfo::from_stages(&stages)
+                    .into_pipeline_layout_create_info(device.clone())
+                    .unwrap(),
+            )
+                .unwrap();
+
+            let subpass = Subpass::from(render_pass.clone(), 0).unwrap();
+
+            GraphicsPipeline::new(
+                device.clone(),
+                None,
+                GraphicsPipelineCreateInfo {
+                    stages: stages.into_iter().collect(),
+                    vertex_input_state: Some(vertex_input_state),
+                    input_assembly_state: Some(InputAssemblyState::default()),
+                    viewport_state: Some(ViewportState {
+                        viewports: [viewport].into_iter().collect(),
+                        ..Default::default()
+                    }),
+                    rasterization_state: Some(RasterizationState::default()),
+                    multisample_state: Some(MultisampleState::default()),
+                    color_blend_state: Some(ColorBlendState::with_attachment_states(
+                        subpass.num_color_attachments(),
+                        ColorBlendAttachmentState::default(),
+                    )),
+                    subpass: Some(subpass.into()),
+                    ..GraphicsPipelineCreateInfo::layout(layout)
+                },
+            )
+                .unwrap()
+        };
+        self.pipeline = Some(pipeline);
+
 
         let framebuffers =
             window_size_dependent_setup(&images, render_pass.clone(), &mut self.viewport);
@@ -208,9 +328,7 @@ impl ApplicationHandler for App {
                     .begin_render_pass(
                         RenderPassBeginInfo {
                             clear_values: vec![Some([0.0, 0.68, 1.0, 1.0].into())],
-                            ..RenderPassBeginInfo::framebuffer(
-                                framebuffers[image_i as usize].clone(),
-                            )
+                            ..RenderPassBeginInfo::framebuffer(framebuffers[image_i as usize].clone())
                         },
                         SubpassBeginInfo {
                             contents: SubpassContents::Inline,
@@ -218,8 +336,21 @@ impl ApplicationHandler for App {
                         },
                     )
                     .unwrap()
+                    .bind_pipeline_graphics(self.pipeline.as_ref().unwrap().clone())
+                    .unwrap()
+                    .bind_vertex_buffers(0, self.vertex_buffer.as_ref().unwrap().clone())
+                    .unwrap();
+
+                unsafe {
+                    cmd_buffer_builder
+                        .draw(self.vertex_buffer.as_ref().unwrap().len() as u32, 1, 0, 0)
+                        .unwrap();
+                }
+
+                cmd_buffer_builder
                     .end_render_pass(SubpassEndInfo::default())
                     .unwrap();
+
 
                 let command_buffer = cmd_buffer_builder.build().unwrap();
 
