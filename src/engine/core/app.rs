@@ -16,6 +16,7 @@ use vulkano::{
     sync::{self, GpuFuture},
     Validated, VulkanError,
 };
+use vulkano::format::Format;
 use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
 use vulkano::pipeline::{GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo};
 use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
@@ -144,7 +145,7 @@ impl ApplicationHandler for App {
             device.clone(),
             attachments: {
                 color: {
-                    format: swapchain.image_format(),
+                    format: Format::R8G8B8A8_SRGB,
                     samples: 1,
                     load_op: Clear,
                     store_op: Store,

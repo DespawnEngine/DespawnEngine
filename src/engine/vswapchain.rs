@@ -6,6 +6,7 @@ use vulkano::{
     render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass},
     swapchain::{CompositeAlpha, Surface, Swapchain, SwapchainCreateInfo},
 };
+use vulkano::format::Format;
 
 pub fn create_swapchain(
     device: Arc<Device>,
@@ -17,11 +18,8 @@ pub fn create_swapchain(
         .surface_capabilities(&surface, Default::default())
         .unwrap();
 
-    let image_format = device
-        .physical_device()
-        .surface_formats(&surface, Default::default())
-        .unwrap()[0]
-        .0;
+    // Force linear format
+    let image_format = Format::R8G8B8A8_SRGB;
 
     Swapchain::new(
         device.clone(),
@@ -35,8 +33,9 @@ pub fn create_swapchain(
             ..Default::default()
         },
     )
-    .unwrap()
+        .unwrap()
 }
+
 
 // Creates framebuffers that link the render pass to the swapchain images.
 // This must be reran whenever the window size changes.
