@@ -1,12 +1,28 @@
 use crate::engine::{
-    display::load_icon, vswapchain::{create_swapchain, window_size_dependent_setup}, vulkan::{create_device_and_queue, create_instance}
+    display::load_icon,
+    vswapchain::{create_swapchain, window_size_dependent_setup},
+    vulkan::{create_device_and_queue, create_instance},
 };
 
 use crate::arguments;
+use crate::engine::imgui_integration::ImguiStruct;
 
-use std::sync::Arc;
+use crate::engine::vertex::MyVertex;
+use std::{sync::Arc};
+use vulkano::format::Format;
+use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
+use vulkano::pipeline::graphics::color_blend::ColorBlendAttachmentState;
+use vulkano::pipeline::graphics::vertex_input::{Vertex, VertexDefinition};
+use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
+use vulkano::pipeline::graphics::{
+    color_blend::ColorBlendState, input_assembly::InputAssemblyState,
+    multisample::MultisampleState, rasterization::RasterizationState,
+};
+use vulkano::pipeline::layout::PipelineDescriptorSetLayoutCreateInfo;
+use vulkano::pipeline::{GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo};
+use vulkano::render_pass::Subpass;
 use vulkano::{
-    buffer::{Buffer, BufferCreateInfo, Subbuffer, BufferUsage},
+    buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer},
     command_buffer::{
         allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage,
         RenderPassBeginInfo, SubpassBeginInfo, SubpassContents, SubpassEndInfo,
@@ -17,31 +33,15 @@ use vulkano::{
     sync::{self, GpuFuture},
     Validated, VulkanError,
 };
-use vulkano::format::Format;
-use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
-use vulkano::pipeline::{GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo};
-use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
-use vulkano::pipeline::graphics::{
-    input_assembly::InputAssemblyState,
-    color_blend::ColorBlendState,
-    rasterization::RasterizationState,
-    multisample::MultisampleState,
-};
-use vulkano::pipeline::graphics::color_blend::ColorBlendAttachmentState;
-use vulkano::pipeline::graphics::vertex_input::{Vertex, VertexDefinition};
-use vulkano::pipeline::layout::PipelineDescriptorSetLayoutCreateInfo;
-use vulkano::render_pass::Subpass;
 use winit::{
-    application::ApplicationHandler,
-    event::WindowEvent,
-    event_loop::ActiveEventLoop,
+    application::ApplicationHandler, event::WindowEvent, event_loop::ActiveEventLoop,
     window::Window,
 };
-use crate::engine::vertex::MyVertex;
 
 // `App` holds the state of the application, including all Vulkan objects that need to persist between frames.
 pub struct App {
     window: Option<Arc<Window>>,
+    imgui_struct: Option<ImguiStruct>,
     surface: Option<Arc<swapchain::Surface>>,
     device: Option<Arc<vulkano::device::Device>>,
     queue: Option<Arc<vulkano::device::Queue>>,
@@ -61,6 +61,7 @@ impl Default for App {
     fn default() -> Self {
         Self {
             window: None,
+            imgui_struct: None,
             surface: None,
             device: None,
             queue: None,
@@ -95,6 +96,9 @@ impl ApplicationHandler for App {
         };
         self.window = Some(window.clone());
 
+        let mut imgui_struct: ImguiStruct = ImguiStruct::new();
+        imgui_struct.paltform_attach_window(&window);
+        self.imgui_struct = Some(imgui_struct);
         // Initialize Vulkan
         let instance = create_instance(event_loop);
         let surface = swapchain::Surface::from_window(instance.clone(), window.clone()).unwrap();
@@ -109,16 +113,26 @@ impl ApplicationHandler for App {
         self.swapchain = Some(swapchain.clone());
         self.images = Some(images.clone());
 
-        let command_buffer_allocator =
-            Arc::new(StandardCommandBufferAllocator::new(device.clone(), Default::default()));
+        let command_buffer_allocator = Arc::new(StandardCommandBufferAllocator::new(
+            device.clone(),
+            Default::default(),
+        ));
         self.command_buffer_allocator = Some(command_buffer_allocator);
-
 
         // Creating vertices for the triangle.
         let vertex_data = [
-            MyVertex { position: [-0.5, -0.5], color: [1.0, 0.0, 0.0] },
-            MyVertex { position: [0.0, 0.5], color: [0.0, 1.0, 0.0] },
-            MyVertex { position: [0.5, -0.5], color: [0.0, 0.0, 1.0] },
+            MyVertex {
+                position: [-0.5, -0.5],
+                color: [1.0, 0.0, 0.0],
+            },
+            MyVertex {
+                position: [0.0, 0.5],
+                color: [0.0, 1.0, 0.0],
+            },
+            MyVertex {
+                position: [0.5, -0.5],
+                color: [0.0, 0.0, 1.0],
+            },
         ];
 
         let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(
@@ -132,15 +146,16 @@ impl ApplicationHandler for App {
                 ..Default::default()
             },
             AllocationCreateInfo {
-                memory_type_filter: MemoryTypeFilter::PREFER_HOST | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                memory_type_filter: MemoryTypeFilter::PREFER_HOST
+                    | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
                 ..Default::default()
             },
             vertex_data,
-        ).unwrap();
+        )
+        .unwrap();
 
         self.vertex_buffer = Some(vertex_buffer);
         // End of creating vertices for the triangle.
-
 
         // Define a simple render pass with one color attachment
         let render_pass = vulkano::single_pass_renderpass!(
@@ -164,15 +179,15 @@ impl ApplicationHandler for App {
         // Loading the vertex and fragment shaders
         mod vs {
             vulkano_shaders::shader! {
-        ty: "vertex",
-        path: "assets/shaders/first_triangle/vertex.glsl"
-        }
+            ty: "vertex",
+            path: "assets/shaders/first_triangle/vertex.glsl"
+            }
         }
         mod fs {
             vulkano_shaders::shader! {
-        ty: "fragment",
-        path: "assets/shaders/first_triangle/fragment.glsl"
-        }
+            ty: "fragment",
+            path: "assets/shaders/first_triangle/fragment.glsl"
+            }
         }
 
         let vs = vs::load(device.clone()).expect("failed to create shader module");
@@ -202,7 +217,7 @@ impl ApplicationHandler for App {
                     .into_pipeline_layout_create_info(device.clone())
                     .unwrap(),
             )
-                .unwrap();
+            .unwrap();
 
             let subpass = Subpass::from(render_pass.clone(), 0).unwrap();
 
@@ -227,10 +242,9 @@ impl ApplicationHandler for App {
                     ..GraphicsPipelineCreateInfo::layout(layout)
                 },
             )
-                .unwrap()
+            .unwrap()
         };
         self.pipeline = Some(pipeline);
-
 
         let framebuffers =
             window_size_dependent_setup(&images, render_pass.clone(), &mut self.viewport);
@@ -265,6 +279,7 @@ impl ApplicationHandler for App {
                 let mut swapchain = self.swapchain.as_ref().unwrap().clone();
                 let render_pass = self.render_pass.as_ref().unwrap();
                 let command_buffer_allocator = self.command_buffer_allocator.as_ref().unwrap();
+                let imgui_struct: &mut ImguiStruct = self.imgui_struct.as_mut().unwrap();
 
                 if self.recreate_swapchain {
                     let image_extent: [u32; 2] = window.inner_size().into();
@@ -311,7 +326,6 @@ impl ApplicationHandler for App {
                         Err(e) => panic!("failed to acquire next image: {e}"),
                     };
 
-
                 if suboptimal {
                     self.recreate_swapchain = true;
                 }
@@ -328,7 +342,9 @@ impl ApplicationHandler for App {
                     .begin_render_pass(
                         RenderPassBeginInfo {
                             clear_values: vec![Some([0.0, 0.68, 1.0, 1.0].into())],
-                            ..RenderPassBeginInfo::framebuffer(framebuffers[image_i as usize].clone())
+                            ..RenderPassBeginInfo::framebuffer(
+                                framebuffers[image_i as usize].clone(),
+                            )
                         },
                         SubpassBeginInfo {
                             contents: SubpassContents::Inline,
@@ -350,7 +366,6 @@ impl ApplicationHandler for App {
                 cmd_buffer_builder
                     .end_render_pass(SubpassEndInfo::default())
                     .unwrap();
-
 
                 let command_buffer = cmd_buffer_builder.build().unwrap();
 
@@ -387,6 +402,9 @@ impl ApplicationHandler for App {
                         self.previous_frame_end = Some(sync::now(device.clone()).boxed());
                     }
                 }
+
+                imgui_struct.draw_to_window(window);
+                window.request_redraw();
             }
             _ => (),
         }
@@ -394,6 +412,8 @@ impl ApplicationHandler for App {
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
         if let Some(window) = &self.window {
+            let imgui_struct: &mut ImguiStruct = self.imgui_struct.as_mut().unwrap();
+            imgui_struct.prepare_frame(window);
             window.request_redraw();
         }
     }

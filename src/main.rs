@@ -9,10 +9,11 @@ use winit::{
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly"))]
 use winit::platform::{wayland::EventLoopBuilderExtWayland, x11::EventLoopBuilderExtX11};
 
+
 fn main() {
     // Use an EventLoopBuilder for more control over the EventLoop
     let mut event_loop_builder: EventLoopBuilder<()> = EventLoop::builder();
-
+    
     #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly"))]
     {
         match arguments::backend_to_use() {
@@ -31,7 +32,7 @@ fn main() {
     let event_loop: EventLoop<()> = event_loop_builder
         .build()
         .expect("Failed to build event loop");
-
+        
     // Use `Poll` for a continuous loop, ideal for game rendering,
     // rather than waiting for OS events.
     event_loop.set_control_flow(ControlFlow::Poll);

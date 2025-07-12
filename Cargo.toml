@@ -6,6 +6,8 @@ edition = "2024"
 [dependencies]
 clap = { version = "4.5.41", features = ["derive"] }
 image = "0.25.6"
+imgui = "0.12.0"
+imgui-winit-support = "0.13.0"
 vulkano = { version = "0.35.1", features = ["macros"] }
 vulkano-shaders = "0.35.0"
 winit = "0.30.11"
