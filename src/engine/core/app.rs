@@ -1,42 +1,44 @@
-use crate::engine::{
-    display::load_icon,
-    egui_integration::EguiStruct,
-    vswapchain::{create_swapchain, window_size_dependent_setup},
-    vulkan::{create_device_and_queue, create_instance},
-};
-
-use crate::arguments;
-
-use crate::engine::vertex::MyVertex;
 use std::sync::Arc;
-use vulkano::format::Format;
-use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
-use vulkano::pipeline::graphics::vertex_input::{Vertex, VertexDefinition};
-use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
-use vulkano::pipeline::graphics::{color_blend::ColorBlendAttachmentState};
-use vulkano::pipeline::graphics::{
-    color_blend::ColorBlendState, input_assembly::InputAssemblyState,
-    multisample::MultisampleState, rasterization::RasterizationState,
-};
-use vulkano::pipeline::layout::PipelineDescriptorSetLayoutCreateInfo;
-use vulkano::pipeline::{GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo};
-use vulkano::render_pass::Subpass;
+
 use vulkano::{
-    buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer},
+    buffer::Subbuffer,
     command_buffer::{
         allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage,
         RenderPassBeginInfo, SubpassBeginInfo, SubpassContents, SubpassEndInfo,
     },
     image::Image,
-    pipeline::graphics::viewport::{Viewport, ViewportState},
+    memory::allocator::StandardMemoryAllocator,
+    pipeline::{
+        graphics::{
+            color_blend::{ColorBlendAttachmentState, ColorBlendState},
+            input_assembly::InputAssemblyState,
+            multisample::MultisampleState,
+            rasterization::RasterizationState,
+            vertex_input::{Vertex, VertexDefinition},
+            viewport::{Viewport, ViewportState},
+        },
+        layout::PipelineDescriptorSetLayoutCreateInfo,
+        GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo,
+    },
+    render_pass::Subpass,
     swapchain::{self},
     sync::{self, GpuFuture},
     Validated, VulkanError,
 };
+use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
 use winit::{
-    application::ApplicationHandler, event::WindowEvent, event_loop::ActiveEventLoop,
+    application::ApplicationHandler,
+    event::WindowEvent,
+    event_loop::ActiveEventLoop,
     window::Window,
 };
+
+use crate::arguments;
+use crate::engine::rendering::display::{create_main_window, create_render_pass, create_vertex_buffer};
+use crate::engine::rendering::vertex::MyVertex;
+use crate::engine::rendering::vswapchain::{create_swapchain, window_size_dependent_setup};
+use crate::engine::rendering::vulkan::{create_device_and_queue, create_instance};
+use crate::engine::ui::egui_integration::EguiStruct;
 
 // `App` holds the state of the application, including all Vulkan objects that need to persist between frames.
 pub struct App {
@@ -87,26 +89,19 @@ impl ApplicationHandler for App {
     // This is called once when the application starts.
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         // Create the window
-        let window = {
-            let window_attributes = Window::default_attributes()
-                .with_title("Despawn Engine")
-                .with_decorations(arguments::use_decorations())
-                .with_window_icon(Some(load_icon("assets/icon.png")));
-            Arc::new(event_loop.create_window(window_attributes).unwrap())
-        };
+        let window = create_main_window(event_loop);
         self.window = Some(window.clone());
+
         // Initialize Vulkan
         let instance = create_instance(event_loop);
         let surface = swapchain::Surface::from_window(instance.clone(), window.clone()).unwrap();
-
         self.surface = Some(surface.clone());
 
         let (device, queue) = create_device_and_queue(instance, surface.clone());
         self.device = Some(device.clone());
         self.queue = Some(queue.clone());
 
-        let (swapchain, images) =
-            create_swapchain(device.clone(), surface.clone(), window.inner_size().into());
+        let (swapchain, images) = create_swapchain(device.clone(), surface.clone(), window.inner_size().into());
         self.swapchain = Some(swapchain.clone());
         self.images = Some(images.clone());
 
@@ -117,69 +112,13 @@ impl ApplicationHandler for App {
         self.command_buffer_allocator = Some(command_buffer_allocator);
 
         // Creating vertices for the triangle.
-        let vertex_data = [
-            MyVertex {
-                position: [-0.5, -0.5],
-                color: [1.0, 0.0, 0.0],
-            },
-            MyVertex {
-                position: [0.0, 0.5],
-                color: [0.0, 1.0, 0.0],
-            },
-            MyVertex {
-                position: [0.5, -0.5],
-                color: [0.0, 0.0, 1.0],
-            },
-        ];
-
-        let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(
-            self.device.as_ref().unwrap().clone(),
-        ));
-
-        let vertex_buffer: Subbuffer<[MyVertex]> = Buffer::from_iter(
-            memory_allocator.clone(),
-            BufferCreateInfo {
-                usage: BufferUsage::VERTEX_BUFFER,
-                ..Default::default()
-            },
-            AllocationCreateInfo {
-                memory_type_filter: MemoryTypeFilter::PREFER_HOST
-                    | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-                ..Default::default()
-            },
-            vertex_data,
-        )
-        .unwrap();
-
+        let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
+        let vertex_buffer = create_vertex_buffer(memory_allocator);
         self.vertex_buffer = Some(vertex_buffer);
         // End of creating vertices for the triangle.
 
-        // Define a less simple render pass with one color attachment and whatever else makes this
-        // maco happy :)
-        let render_pass = vulkano::ordered_passes_renderpass!(
-            device.clone(),
-            attachments:    {
-                color:  {
-                    format: Format::R8G8B8A8_SRGB,
-                    samples: 1,
-                    load_op: Clear,
-                    store_op: Store,
-                }
-            },
-            passes: [
-                {
-                color: [color],
-                depth_stencil: {},
-                input: []
-                },
-                {
-                color: [color],
-                depth_stencil: {},
-                input: []
-                }
-            ]
-        )
-        .unwrap();
+        // Define the render pass from display.rs
+        let render_pass = create_render_pass(device.clone());
         self.render_pass = Some(render_pass.clone());
 
         self.egui = Some(EguiStruct::new(
@@ -192,14 +131,14 @@ impl ApplicationHandler for App {
         // Loading the vertex and fragment shaders
         mod vs {
             vulkano_shaders::shader! {
-            ty: "vertex",
-            path: "assets/shaders/first_triangle/vertex.glsl"
+                ty: "vertex",
+                path: "assets/shaders/first_triangle/vertex.glsl"
             }
         }
         mod fs {
             vulkano_shaders::shader! {
-            ty: "fragment",
-            path: "assets/shaders/first_triangle/fragment.glsl"
+                ty: "fragment",
+                path: "assets/shaders/first_triangle/fragment.glsl"
             }
         }
 
@@ -229,8 +168,7 @@ impl ApplicationHandler for App {
                 PipelineDescriptorSetLayoutCreateInfo::from_stages(&stages)
                     .into_pipeline_layout_create_info(device.clone())
                     .unwrap(),
-            )
-            .unwrap();
+            ).unwrap();
 
             let subpass = Subpass::from(render_pass.clone(), 0).unwrap();
 
@@ -252,15 +190,12 @@ impl ApplicationHandler for App {
                         ColorBlendAttachmentState::default(),
                     )),
                     subpass: Some(subpass.into()),
-
                     ..GraphicsPipelineCreateInfo::layout(layout)
                 },
-            )
-            .unwrap()
+            ).unwrap()
         };
         self.pipeline = Some(pipeline);
-        let framebuffers =
-            window_size_dependent_setup(&images, render_pass.clone(), &mut self.viewport);
+        let framebuffers = window_size_dependent_setup(&images, render_pass.clone(), &mut self.viewport);
         self.framebuffers = Some(framebuffers);
         self.recreate_swapchain = false;
         self.previous_frame_end = Some(sync::now(device.clone()).boxed());
@@ -371,9 +306,7 @@ impl ApplicationHandler for App {
                     .unwrap();
 
                 unsafe {
-                    cmd_buffer_builder
-                        .draw(self.vertex_buffer.as_ref().unwrap().len() as u32, 1, 0, 0)
-                        .unwrap();
+                    cmd_buffer_builder.draw(self.vertex_buffer.as_ref().unwrap().len() as u32, 1, 0, 0).unwrap();
                 }
 
                 let image_extent: [u32; 2] = window.inner_size().into();
@@ -392,12 +325,6 @@ impl ApplicationHandler for App {
                     .unwrap();
 
                 let command_buffer = cmd_buffer_builder.build().unwrap();
-                /*if let Ok(image_view) = ImageView::new(
-                    (self.images.as_mut().unwrap().index(image_i as usize)).clone(),
-                    ImageViewCreateInfo::default(),
-                ) {
-                    let after_future = egui.draw_on_image(acquire_future, image_view);
-                }*/
 
                 // Chain all GPU operations together:
                 // 1. Wait for the previous frame to finish.
