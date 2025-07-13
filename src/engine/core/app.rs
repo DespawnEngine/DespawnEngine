@@ -1,40 +1,46 @@
-use crate::engine::rendering::display::load_icon;
-use crate::engine::rendering::vertex::MyVertex;
-use crate::engine::rendering::vswapchain::{create_swapchain, window_size_dependent_setup};
-use crate::engine::rendering::vulkan::{create_device_and_queue, create_instance};
-use crate::engine::ui::egui_integration::EguiStruct;
-
-use crate::arguments;
-
 use std::sync::Arc;
-use vulkano::format::Format;
-use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
-use vulkano::pipeline::graphics::vertex_input::{Vertex, VertexDefinition};
-use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
-use vulkano::pipeline::graphics::{color_blend::ColorBlendAttachmentState};
-use vulkano::pipeline::graphics::{
-    color_blend::ColorBlendState, input_assembly::InputAssemblyState,
-    multisample::MultisampleState, rasterization::RasterizationState,
-};
-use vulkano::pipeline::layout::PipelineDescriptorSetLayoutCreateInfo;
-use vulkano::pipeline::{GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo};
-use vulkano::render_pass::Subpass;
+
 use vulkano::{
     buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer},
     command_buffer::{
         allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage,
         RenderPassBeginInfo, SubpassBeginInfo, SubpassContents, SubpassEndInfo,
     },
+    format::Format,
     image::Image,
-    pipeline::graphics::viewport::{Viewport, ViewportState},
+    memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator},
+    pipeline::{
+        graphics::{
+            color_blend::{ColorBlendAttachmentState, ColorBlendState},
+            input_assembly::InputAssemblyState,
+            multisample::MultisampleState,
+            rasterization::RasterizationState,
+            vertex_input::{Vertex, VertexDefinition},
+            viewport::{Viewport, ViewportState},
+        },
+        layout::PipelineDescriptorSetLayoutCreateInfo,
+        GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo,
+    },
+    render_pass::Subpass,
     swapchain::{self},
     sync::{self, GpuFuture},
     Validated, VulkanError,
 };
+use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
 use winit::{
-    application::ApplicationHandler, event::WindowEvent, event_loop::ActiveEventLoop,
+    application::ApplicationHandler,
+    event::WindowEvent,
+    event_loop::ActiveEventLoop,
     window::Window,
 };
+
+use crate::arguments;
+use crate::engine::rendering::display::load_icon;
+use crate::engine::rendering::vertex::MyVertex;
+use crate::engine::rendering::vswapchain::{create_swapchain, window_size_dependent_setup};
+use crate::engine::rendering::vulkan::{create_device_and_queue, create_instance};
+use crate::engine::ui::egui_integration::EguiStruct;
+
 
 // `App` holds the state of the application, including all Vulkan objects that need to persist between frames.
 pub struct App {
