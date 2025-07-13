@@ -8,6 +8,8 @@ use vulkano::{
 };
 use vulkano::format::Format;
 
+pub const IMAGE_FORMAT: Format = Format::R8G8B8A8_SRGB;
+
 pub fn create_swapchain(
     device: Arc<Device>,
     surface: Arc<Surface>,
@@ -19,14 +21,13 @@ pub fn create_swapchain(
         .unwrap();
 
     // Force linear format
-    let image_format = Format::R8G8B8A8_SRGB;
 
     Swapchain::new(
         device.clone(),
         surface.clone(),
         SwapchainCreateInfo {
             min_image_count: surface_capabilities.min_image_count.max(2),
-            image_format,
+            image_format: IMAGE_FORMAT,
             image_extent,
             image_usage: ImageUsage::COLOR_ATTACHMENT,
             composite_alpha: CompositeAlpha::Opaque,
