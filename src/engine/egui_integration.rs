@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use egui_winit_vulkano::{
     egui::{self, FontDefinitions},
     Gui, GuiConfig,
@@ -19,6 +20,8 @@ pub struct EguiStruct {
     gui: Gui,
     system: System,
     queue: Arc<Queue>, // For GPU info
+    last_update: Instant,
+    update_interval: Duration, // frequently to update the UI window
 }
 
 impl EguiStruct {
@@ -41,7 +44,7 @@ impl EguiStruct {
         );
         let mut system = System::new_all();
         system.refresh_all(); // Initial refresh
-        EguiStruct { gui: egui, system, queue }
+        EguiStruct { gui: egui, system, queue, last_update: Instant::now(), update_interval: Duration::from_secs_f64(0.5) }
     }
 
     pub fn update(&mut self, event: &WindowEvent) {
@@ -49,38 +52,62 @@ impl EguiStruct {
     }
 
     pub fn redraw(&mut self) {
-        self.system.refresh_all(); // Refresh system info
+        // Only refresh system info if enough time has passed
+        if self.last_update.elapsed() >= self.update_interval {
+            self.system.refresh_all();
+            self.last_update = Instant::now();
+        }
+
+
         let fonts: FontDefinitions = FontDefinitions::default();
         self.gui.immediate_ui(|gui| {
             let ctx = gui.context();
             ctx.set_fonts(fonts);
             egui::Window::new("Despawn Debugger").resizable(true).show(&ctx, |ui| {
+
+                // System Info Header
                 ui.heading("System Information");
 
                 // CPU Info and Usage
-                let cpu = self.system.cpus().first().map(|cpu| (cpu.brand(), cpu.cpu_usage())).unwrap_or(("Unknown", 0.0));
-                let cpu_cores = self.system.cpus().len();
-                ui.horizontal(|ui| {
-                    ui.label(format!("CPU: {} ({} cores, {:.1}% usage)", cpu.0, cpu_cores, cpu.1));
-                });
+                egui::CollapsingHeader::new("CPU")
+                    .default_open(false)
+                    .show(ui, |ui| {
+                        let cpu = self.system.cpus().first().map(|cpu| (cpu.brand(), cpu.cpu_usage())).unwrap_or(("Unknown", 0.0));
+                        let cpu_cores = self.system.cpus().len();
+                        ui.add_space(5.0);
+                        ui.label(egui::RichText::new(format!("Model: {}", cpu.0)).strong());
+                        ui.label(format!("Cores: {}", cpu_cores));
+                        ui.add(egui::ProgressBar::new(cpu.1 / 100.0)
+                            .text(format!("Usage: {:.1}%", cpu.1))
+                            .desired_width(250.0));
+                    });
 
                 // RAM Info and Usage
-                let total_memory = self.system.total_memory();
-                let used_memory = self.system.used_memory();
-                let ram_usage = (used_memory as f64 / total_memory as f64) * 100.0;
-                ui.horizontal(|ui| {
-                    ui.label(format!("RAM: {:.1} GB ({:.1}% used, {:.1} GB / {:.1} GB)",
-                                     total_memory as f64 / 1_073_741_824.0,
-                                     ram_usage,
-                                     used_memory as f64 / 1_073_741_824.0,
-                                     total_memory as f64 / 1_073_741_824.0));
-                });
+                egui::CollapsingHeader::new("Memory")
+                    .default_open(false)
+                    .show(ui, |ui| {
+                        let total_memory = self.system.total_memory();
+                        let used_memory = self.system.used_memory();
+                        let ram_usage = (used_memory as f64 / total_memory as f64) * 100.0;
+                        ui.add_space(5.0);
+                        ui.label(egui::RichText::new(format!("Total: {:.1} GB", total_memory as f64 / 1_073_741_824.0)).strong());
+                        ui.label(format!("Used: {:.1} GB ({:.1}%)", used_memory as f64 / 1_073_741_824.0, ram_usage));
+                        ui.add(egui::ProgressBar::new(ram_usage as f32 / 100.0)
+                            .text(format!("{:.1}%", ram_usage))
+                            .desired_width(250.0));
+                    });
 
                 // GPU Info (from Vulkan)
-                let gpu_name = self.queue.device().physical_device().properties().device_name.to_string();
-                ui.horizontal(|ui| {
-                    ui.label(format!("GPU: {}", gpu_name));
-                });
+                egui::CollapsingHeader::new("GPU")
+                    .default_open(false)
+                    .show(ui, |ui| {
+                        let gpu_name = self.queue.device().physical_device().properties().device_name.to_string();
+                        ui.add_space(5.0);
+                        ui.label(egui::RichText::new(format!("Model: {}", gpu_name)).strong());
+                    });
+
+                // Game Specifics Header
+                ui.heading("Game Specifics");
             });
         })
     }
