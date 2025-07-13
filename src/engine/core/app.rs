@@ -1,13 +1,11 @@
-use crate::engine::{
-    display::load_icon,
-    egui_integration::EguiStruct,
-    vswapchain::{create_swapchain, window_size_dependent_setup},
-    vulkan::{create_device_and_queue, create_instance},
-};
+use crate::engine::rendering::display::load_icon;
+use crate::engine::rendering::vertex::MyVertex;
+use crate::engine::rendering::vswapchain::{create_swapchain, window_size_dependent_setup};
+use crate::engine::rendering::vulkan::{create_device_and_queue, create_instance};
+use crate::engine::ui::egui_integration::EguiStruct;
 
 use crate::arguments;
 
-use crate::engine::vertex::MyVertex;
 use std::sync::Arc;
 use vulkano::format::Format;
 use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};

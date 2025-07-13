@@ -13,8 +13,7 @@ use winit::{
     event_loop::{ActiveEventLoop},
 };
 use sysinfo::{System};
-
-use crate::engine::vswapchain::IMAGE_FORMAT;
+use crate::engine::rendering::vswapchain::IMAGE_FORMAT;
 
 pub struct EguiStruct {
     gui: Gui,
