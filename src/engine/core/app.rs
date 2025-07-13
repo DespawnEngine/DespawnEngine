@@ -325,12 +325,6 @@ impl ApplicationHandler for App {
                     .unwrap();
 
                 let command_buffer = cmd_buffer_builder.build().unwrap();
-                /*if let Ok(image_view) = ImageView::new(
-                    (self.images.as_mut().unwrap().index(image_i as usize)).clone(),
-                    ImageViewCreateInfo::default(),
-                ) {
-                    let after_future = egui.draw_on_image(acquire_future, image_view);
-                }*/
 
                 // Chain all GPU operations together:
                 // 1. Wait for the previous frame to finish.
