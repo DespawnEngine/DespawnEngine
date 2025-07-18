@@ -7,6 +7,8 @@ use vulkano::{
     swapchain::{CompositeAlpha, Surface, Swapchain, SwapchainCreateInfo},
 };
 use vulkano::format::Format;
+use vulkano::image::{ImageCreateInfo, ImageType};
+use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
 
 pub const IMAGE_FORMAT: Format = Format::R8G8B8A8_SRGB;
 
@@ -44,22 +46,40 @@ pub fn window_size_dependent_setup(
     images: &[Arc<Image>],
     render_pass: Arc<RenderPass>,
     viewport: &mut Viewport,
+    memory_allocator: &Arc<StandardMemoryAllocator>,
 ) -> Vec<Arc<Framebuffer>> {
     let dimensions = images[0].extent();
     viewport.extent = [dimensions[0] as f32, dimensions[1] as f32];
 
+    let depth_image = Image::new(
+        memory_allocator.clone(),
+        ImageCreateInfo {
+            image_type: ImageType::Dim2d,
+            format: Format::D32_SFLOAT,
+            extent: [dimensions[0], dimensions[1], 1],
+            usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT,
+            ..Default::default()
+        },
+        AllocationCreateInfo {
+            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
+            ..Default::default()
+        },
+    ).unwrap();
+
+    let depth_view = ImageView::new_default(depth_image.clone()).unwrap();
+
     images
         .iter()
         .map(|image| {
-            let view = ImageView::new_default(image.clone()).unwrap();
+            let color_view = ImageView::new_default(image.clone()).unwrap();
             Framebuffer::new(
                 render_pass.clone(),
                 FramebufferCreateInfo {
-                    attachments: vec![view],
+                    attachments: vec![color_view, depth_view.clone()],
                     ..Default::default()
                 },
             )
-            .unwrap()
+                .unwrap()
         })
-        .collect::<Vec<_>>()
+        .collect()
 }

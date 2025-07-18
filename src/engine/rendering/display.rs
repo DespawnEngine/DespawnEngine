@@ -33,12 +33,18 @@ pub fn create_render_pass(device: Arc<Device>) -> Arc<RenderPass> {
                 samples: 1,
                 load_op: Clear,
                 store_op: Store,
+            },
+            depth: {
+                format: Format::D32_SFLOAT,
+                samples: 1,
+                load_op: Clear,
+                store_op: DontCare,
             }
         },
         passes: [
             {
                 color: [color],
-                depth_stencil: {},
+                depth_stencil: {depth},
                 input: []
             },
             {
@@ -50,24 +56,38 @@ pub fn create_render_pass(device: Arc<Device>) -> Arc<RenderPass> {
     ).unwrap()
 }
 
-// Create vertex buffer and simple triangle rendering
+// Create vertex buffer and simple cube rendering
 pub fn create_vertex_buffer(
     allocator: Arc<StandardMemoryAllocator>,
 ) -> Subbuffer<[MyVertex]> {
     let vertex_data = [
-        MyVertex {
-            position: [-0.5, -0.5],
-            color: [1.0, 0.0, 0.0],
-        },
-        MyVertex {
-            position: [0.0, 0.5],
-            color: [0.0, 1.0, 0.0],
-        },
-        MyVertex {
-            position: [0.5, -0.5],
-            color: [0.0, 0.0, 1.0],
-        },
+        // Front face
+        MyVertex { position: [-0.5, -0.5,  0.5], color: [1.0, 0.0, 0.0] },
+        MyVertex { position: [ 0.5, -0.5,  0.5], color: [0.0, 1.0, 0.0] },
+        MyVertex { position: [ 0.5,  0.5,  0.5], color: [0.0, 0.0, 1.0] },
+        MyVertex { position: [-0.5,  0.5,  0.5], color: [1.0, 1.0, 0.0] },
+
+        // Back face
+        MyVertex { position: [-0.5, -0.5, -0.5], color: [1.0, 0.0, 1.0] },
+        MyVertex { position: [ 0.5, -0.5, -0.5], color: [0.0, 1.0, 1.0] },
+        MyVertex { position: [ 0.5,  0.5, -0.5], color: [0.5, 0.5, 0.5] },
+        MyVertex { position: [-0.5,  0.5, -0.5], color: [1.0, 1.0, 1.0] },
     ];
+
+    // Define triangles using these vertices
+    let index_order = [
+        0, 1, 2, 2, 3, 0, // front
+        1, 5, 6, 6, 2, 1, // right
+        5, 4, 7, 7, 6, 5, // back
+        4, 0, 3, 3, 7, 4, // left
+        3, 2, 6, 6, 7, 3, // top
+        4, 5, 1, 1, 0, 4, // bottom
+    ];
+
+    let full_vertex_data: Vec<MyVertex> = index_order
+        .iter()
+        .map(|&i| vertex_data[i].clone())
+        .collect();
 
     Buffer::from_iter(
         allocator.clone(),
@@ -80,10 +100,10 @@ pub fn create_vertex_buffer(
                 | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
             ..Default::default()
         },
-        vertex_data,
-    )
-        .unwrap()
+        full_vertex_data,
+    ).unwrap()
 }
+
 
 
 // Helper function for loading an icon for the window icon. Code will likely be changed, but I wanted to experiment to learn more.
