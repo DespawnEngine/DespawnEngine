@@ -9,7 +9,6 @@ egui = { version = "0.31.0", features = ["default_fonts"] }
 egui_plot = "0.32.1"
 egui_winit_vulkano = "0.28.0"
 image = "0.25.6"
-memory-stats = "1.2.0"
 sysinfo = "0.36.0"
 vulkano = { version = "0.35.1", features = ["macros"] }
 vulkano-shaders = "0.35.0"

@@ -1,21 +1,20 @@
-use crate::engine::{rendering::vswapchain::IMAGE_FORMAT, ui::debug_ui};
+use crate::engine::rendering::vswapchain::IMAGE_FORMAT;
 use crate::engine::ui::debug_ui::DebugUi;
-use egui_winit_vulkano::{
-    egui::{self, FontDefinitions},
-    Gui, GuiConfig,
-};
+use egui_winit_vulkano::{Gui, GuiConfig};
+
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use sysinfo::System;
+use sysinfo::{Process, System};
 use vulkano::{
     command_buffer::SecondaryAutoCommandBuffer, device::Queue, render_pass::Subpass,
     swapchain::Surface,
 };
+
 use winit::{event::WindowEvent, event_loop::ActiveEventLoop};
 
 pub struct EguiStruct {
     gui: Gui,
-    pub system: System,
+    system: System,
     queue: Arc<Queue>, // For GPU info
     last_update: Instant,
     update_interval: Duration, // frequently to update the UI window
@@ -44,9 +43,7 @@ impl EguiStruct {
 
         system.refresh_all(); // Initial refresh
 
-
         let debug_ui = DebugUi::new(queue.clone());
-
         EguiStruct {
             gui: egui,
             system,
