@@ -1,27 +1,25 @@
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use crate::engine::{rendering::vswapchain::IMAGE_FORMAT, ui::debug_ui};
+use crate::engine::ui::debug_ui::DebugUi;
 use egui_winit_vulkano::{
     egui::{self, FontDefinitions},
     Gui, GuiConfig,
 };
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use sysinfo::System;
 use vulkano::{
     command_buffer::SecondaryAutoCommandBuffer, device::Queue, render_pass::Subpass,
     swapchain::Surface,
 };
-use winit::{
-    event::WindowEvent,
-    event_loop::{ActiveEventLoop},
-};
-use sysinfo::{System};
-use crate::engine::rendering::vswapchain::IMAGE_FORMAT;
-use crate::engine::ui::debug_ui::DebugUi;
+use winit::{event::WindowEvent, event_loop::ActiveEventLoop};
 
 pub struct EguiStruct {
     gui: Gui,
-    system: System,
+    pub system: System,
     queue: Arc<Queue>, // For GPU info
     last_update: Instant,
     update_interval: Duration, // frequently to update the UI window
+    debug_ui: DebugUi,
 }
 
 impl EguiStruct {
@@ -43,8 +41,20 @@ impl EguiStruct {
             },
         );
         let mut system = System::new_all();
+
         system.refresh_all(); // Initial refresh
-        EguiStruct { gui: egui, system, queue, last_update: Instant::now(), update_interval: Duration::from_secs_f64(0.5) }
+
+
+        let debug_ui = DebugUi::new(queue.clone());
+
+        EguiStruct {
+            gui: egui,
+            system,
+            queue,
+            last_update: Instant::now(),
+            update_interval: Duration::from_secs_f64(0.5),
+            debug_ui,
+        }
     }
 
     pub fn update(&mut self, event: &WindowEvent) {
@@ -59,11 +69,7 @@ impl EguiStruct {
 
         self.gui.immediate_ui(|gui| {
             let ctx = gui.context();
-            let debug_ui = DebugUi {
-                system: &self.system,
-                queue: self.queue.clone(),
-            };
-            debug_ui.render(&ctx);
+            self.debug_ui.render(&ctx, &self.system);
         });
     }
 
