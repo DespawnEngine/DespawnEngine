@@ -145,7 +145,7 @@ impl ApplicationHandler for App {
         let vertex_buffer = create_vertex_buffer(self.memory_allocator.as_ref().unwrap().clone());
         self.vertex_buffer = Some(vertex_buffer);
 
-        self.camera = Some(Camera::from_pos(10.0, 0.0, 10.0));
+        self.camera = Some(Camera::from_pos(2.5, 2.5, 2.5));
 
         let mvp_buffer = Buffer::from_data(
             self.memory_allocator.as_ref().unwrap().clone(),

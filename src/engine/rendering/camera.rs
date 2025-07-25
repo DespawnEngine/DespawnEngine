@@ -10,7 +10,7 @@ impl Camera{
     pub fn from_pos(pos_x: f32, pos_y: f32, pos_z: f32) -> Self{
         Camera{
             position: [pos_x, pos_y, pos_z].into(),
-            rotation_quat: Quat::from_euler_deg(0.0, 45.0, 0.0)
+            rotation_quat: Quat::from_euler_deg(-45.0, 45.0, 0.0)
         }
     }
 

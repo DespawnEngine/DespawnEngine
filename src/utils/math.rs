@@ -54,15 +54,18 @@ impl Quat {
 
     pub fn from_euler_deg(x_rot: f32, y_rot: f32, z_rot: f32) -> Self {
         glam_quat::from_euler(
-            EulerRot::XYZ,
-            x_rot.to_radians(),
+            EulerRot::YXZ,
             y_rot.to_radians(),
+            x_rot.to_radians(),
             z_rot.to_radians(),
         )
         .into()
     }
 
 }
+
+// Taken from
+// https://docs.rs/glm/latest/src/glm/ext/matrix/transform.rs.html#65-88
 
 /// Creates a matrix for a right handed, symetric perspective-view frustum.
 

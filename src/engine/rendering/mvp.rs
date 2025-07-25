@@ -17,7 +17,7 @@ impl Default for MVP {
         Self {
             model: Mat4::IDENTITY,
             view: Mat4::IDENTITY,
-            proj: perspective_rh(90.0, 1.0, 0.01, 20.0),
+            proj: perspective_rh(80.0, 1.0, 0.01, 20.0),
         }
     }
 }
