@@ -1,4 +1,5 @@
 // engine/renderer/first_triangle.rs
+use crate::utils::math::Vec3;
 use vulkano::buffer::BufferContents;
 use vulkano::pipeline::graphics::vertex_input::Vertex;
 
@@ -6,7 +7,7 @@ use vulkano::pipeline::graphics::vertex_input::Vertex;
 #[repr(C)]
 pub struct MyVertex {
     #[format(R32G32B32_SFLOAT)]
-    pub position: [f32; 3],  // now matches the format (3 * 4 bytes = 12)
+    pub position: Vec3,  // now matches the format (3 * 4 bytes = 12)
     #[format(R32G32B32_SFLOAT)]
-    pub color: [f32; 3],
+    pub color: Vec3,
 }

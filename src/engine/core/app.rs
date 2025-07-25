@@ -1,5 +1,14 @@
 use std::sync::Arc;
 
+use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
+use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
+use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocatorCreateInfo;
+use vulkano::descriptor_set::DescriptorSet;
+use vulkano::descriptor_set::WriteDescriptorSet;
+use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter};
+use vulkano::pipeline::graphics::depth_stencil::DepthStencilState;
+use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
+use vulkano::pipeline::Pipeline;
 use vulkano::{
     buffer::Subbuffer,
     command_buffer::{
@@ -25,31 +34,24 @@ use vulkano::{
     sync::{self, GpuFuture},
     Validated, VulkanError,
 };
-use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
-use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
-use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocatorCreateInfo;
-use vulkano::descriptor_set::WriteDescriptorSet;
-use vulkano::descriptor_set::DescriptorSet;
-use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter};
-use vulkano::pipeline::graphics::depth_stencil::DepthStencilState;
-use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
-use vulkano::pipeline::Pipeline;
 use winit::{
-    application::ApplicationHandler,
-    event::WindowEvent,
-    event_loop::ActiveEventLoop,
+    application::ApplicationHandler, event::WindowEvent, event_loop::ActiveEventLoop,
     window::Window,
 };
 
-use crate::arguments;
-use crate::engine::rendering::display::{create_main_window, create_render_pass, create_vertex_buffer};
-use crate::engine::rendering::vertex::MyVertex;
+use crate::engine::rendering::camera;
 use crate::engine::rendering::mvp::MVP;
+use crate::engine::rendering::vertex::MyVertex;
 use crate::engine::rendering::vswapchain::{create_swapchain, window_size_dependent_setup};
 use crate::engine::rendering::vulkan::{create_device_and_queue, create_instance};
+use crate::engine::rendering::{
+    camera::Camera,
+    display::{create_main_window, create_render_pass, create_vertex_buffer},
+};
 use crate::engine::ui::egui_integration::EguiStruct;
+use crate::utils::math::Vec3;
 
-
+//
 // `App` holds the state of the application, including all Vulkan objects that need to persist between frames.
 pub struct App {
     window: Option<Arc<Window>>,
@@ -71,6 +73,7 @@ pub struct App {
     descriptor_set_allocator: Option<Arc<StandardDescriptorSetAllocator>>,
     descriptor_set: Option<Arc<DescriptorSet>>,
     memory_allocator: Option<Arc<StandardMemoryAllocator>>,
+    camera: Option<Camera>,
 }
 
 impl Default for App {
@@ -99,6 +102,7 @@ impl Default for App {
             descriptor_set_allocator: None,
             descriptor_set: None,
             memory_allocator: None,
+            camera: None,
         }
     }
 }
@@ -119,7 +123,8 @@ impl ApplicationHandler for App {
         self.device = Some(device.clone());
         self.queue = Some(queue.clone());
 
-        let (swapchain, images) = create_swapchain(device.clone(), surface.clone(), window.inner_size().into());
+        let (swapchain, images) =
+            create_swapchain(device.clone(), surface.clone(), window.inner_size().into());
         self.swapchain = Some(swapchain.clone());
         self.images = Some(images.clone());
 
@@ -140,6 +145,8 @@ impl ApplicationHandler for App {
         let vertex_buffer = create_vertex_buffer(self.memory_allocator.as_ref().unwrap().clone());
         self.vertex_buffer = Some(vertex_buffer);
 
+        self.camera = Some(Camera::from_pos(10.0, 0.0, 10.0));
+
         let mvp_buffer = Buffer::from_data(
             self.memory_allocator.as_ref().unwrap().clone(),
             BufferCreateInfo {
@@ -152,7 +159,8 @@ impl ApplicationHandler for App {
                 ..Default::default()
             },
             MVP::default(),
-        ).unwrap();
+        )
+        .unwrap();
 
         let framebuffers = window_size_dependent_setup(
             &images,
@@ -166,14 +174,14 @@ impl ApplicationHandler for App {
             event_loop,
             surface,
             queue,
-            Subpass::from(render_pass.clone(), 1).unwrap()
+            Subpass::from(render_pass.clone(), 1).unwrap(),
         ));
 
         let depth_stencil_state = DepthStencilState {
             depth: Some(vulkano::pipeline::graphics::depth_stencil::DepthState {
                 write_enable: true,
                 compare_op: vulkano::pipeline::graphics::depth_stencil::CompareOp::Less,
-                ..Default::default()
+                //..Default::default()
             }),
             ..Default::default()
         };
@@ -218,7 +226,8 @@ impl ApplicationHandler for App {
                 PipelineDescriptorSetLayoutCreateInfo::from_stages(&stages)
                     .into_pipeline_layout_create_info(device.clone())
                     .unwrap(),
-            ).unwrap();
+            )
+            .unwrap();
 
             let subpass = Subpass::from(render_pass.clone(), 0).unwrap();
 
@@ -243,10 +252,10 @@ impl ApplicationHandler for App {
                     subpass: Some(subpass.into()),
                     ..GraphicsPipelineCreateInfo::layout(layout)
                 },
-            ).unwrap()
+            )
+            .unwrap()
         };
         self.pipeline = Some(pipeline.clone()); // store
-        let layout = pipeline.layout().set_layouts()[0].clone(); // use
 
         let descriptor_set_allocator = Arc::new(StandardDescriptorSetAllocator::new(
             device.clone(),
@@ -258,7 +267,8 @@ impl ApplicationHandler for App {
             layout.clone(),
             [WriteDescriptorSet::buffer(0, mvp_buffer.clone())],
             [],
-        ).unwrap();
+        )
+        .unwrap();
 
         self.descriptor_set_allocator = Some(descriptor_set_allocator);
         self.descriptor_set = Some(set);
@@ -293,6 +303,30 @@ impl ApplicationHandler for App {
             }
             WindowEvent::RedrawRequested => {
                 egui.redraw();
+
+                let layout = self.pipeline.clone().unwrap().layout().set_layouts()[0].clone(); // use
+
+                let mvp_buffer = Buffer::from_data(
+                    self.memory_allocator.as_ref().unwrap().clone(),
+                    BufferCreateInfo {
+                        usage: BufferUsage::UNIFORM_BUFFER,
+                        ..Default::default()
+                    },
+                    AllocationCreateInfo {
+                        memory_type_filter: MemoryTypeFilter::PREFER_HOST
+                            | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                        ..Default::default()
+                    },
+                    MVP::default().apply_camera_transforms(self.camera.unwrap()),
+                )
+                .unwrap();
+                let set = DescriptorSet::new(
+                    self.descriptor_set_allocator.clone().unwrap().clone(),
+                    layout.clone(),
+                    [WriteDescriptorSet::buffer(0, mvp_buffer.clone())],
+                    [],
+                )
+                .unwrap();
                 if self.previous_frame_end.is_none() {
                     return;
                 }
@@ -367,7 +401,7 @@ impl ApplicationHandler for App {
                         RenderPassBeginInfo {
                             clear_values: vec![
                                 Some([0.0, 0.68, 1.0, 1.0].into()), // for color
-                                Some(1.0_f32.into()), // depth
+                                Some(1.0_f32.into()),               // depth
                             ],
                             ..RenderPassBeginInfo::framebuffer(
                                 framebuffers[image_i as usize].clone(),
@@ -387,7 +421,7 @@ impl ApplicationHandler for App {
                         vulkano::pipeline::PipelineBindPoint::Graphics,
                         self.pipeline.as_ref().unwrap().layout().clone(),
                         0,
-                        self.descriptor_set.as_ref().unwrap().clone(),
+                        set.clone(),
                     )
                     .unwrap();
 

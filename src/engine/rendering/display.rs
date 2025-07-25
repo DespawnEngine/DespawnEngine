@@ -62,16 +62,16 @@ pub fn create_vertex_buffer(
 ) -> Subbuffer<[MyVertex]> {
     let vertex_data = [
         // Front face
-        MyVertex { position: [-0.5, -0.5,  0.5], color: [1.0, 0.0, 0.0] },
-        MyVertex { position: [ 0.5, -0.5,  0.5], color: [0.0, 1.0, 0.0] },
-        MyVertex { position: [ 0.5,  0.5,  0.5], color: [0.0, 0.0, 1.0] },
-        MyVertex { position: [-0.5,  0.5,  0.5], color: [1.0, 1.0, 0.0] },
+        MyVertex { position: [-0.5, -0.5,  0.5].into(), color: [1.0, 0.0, 0.0].into() },
+        MyVertex { position: [ 0.5, -0.5,  0.5].into(), color: [0.0, 1.0, 0.0].into() },
+        MyVertex { position: [ 0.5,  0.5,  0.5].into(), color: [0.0, 0.0, 1.0].into() },
+        MyVertex { position: [-0.5,  0.5,  0.5].into(), color: [1.0, 1.0, 0.0].into() },
 
         // Back face
-        MyVertex { position: [-0.5, -0.5, -0.5], color: [1.0, 0.0, 1.0] },
-        MyVertex { position: [ 0.5, -0.5, -0.5], color: [0.0, 1.0, 1.0] },
-        MyVertex { position: [ 0.5,  0.5, -0.5], color: [0.5, 0.5, 0.5] },
-        MyVertex { position: [-0.5,  0.5, -0.5], color: [1.0, 1.0, 1.0] },
+        MyVertex { position: [-0.5, -0.5, -0.5].into(), color: [1.0, 0.0, 1.0].into() },
+        MyVertex { position: [ 0.5, -0.5, -0.5].into(), color: [0.0, 1.0, 1.0].into() },
+        MyVertex { position: [ 0.5,  0.5, -0.5].into(), color: [0.5, 0.5, 0.5].into() },
+        MyVertex { position: [-0.5,  0.5, -0.5].into(), color: [1.0, 1.0, 1.0].into() },
     ];
 
     // Define triangles using these vertices
