@@ -1,5 +1,14 @@
 use std::sync::Arc;
 
+use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
+use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
+use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocatorCreateInfo;
+use vulkano::descriptor_set::DescriptorSet;
+use vulkano::descriptor_set::WriteDescriptorSet;
+use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter};
+use vulkano::pipeline::graphics::depth_stencil::DepthStencilState;
+use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
+use vulkano::pipeline::Pipeline;
 use vulkano::{
     buffer::Subbuffer,
     command_buffer::{
@@ -25,21 +34,24 @@ use vulkano::{
     sync::{self, GpuFuture},
     Validated, VulkanError,
 };
-use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
 use winit::{
-    application::ApplicationHandler,
-    event::WindowEvent,
-    event_loop::ActiveEventLoop,
+    application::ApplicationHandler, event::WindowEvent, event_loop::ActiveEventLoop,
     window::Window,
 };
 
-use crate::arguments;
-use crate::engine::rendering::display::{create_main_window, create_render_pass, create_vertex_buffer};
+use crate::engine::rendering::camera;
+use crate::engine::rendering::mvp::MVP;
 use crate::engine::rendering::vertex::MyVertex;
 use crate::engine::rendering::vswapchain::{create_swapchain, window_size_dependent_setup};
 use crate::engine::rendering::vulkan::{create_device_and_queue, create_instance};
+use crate::engine::rendering::{
+    camera::Camera,
+    display::{create_main_window, create_render_pass, create_vertex_buffer},
+};
 use crate::engine::ui::egui_integration::EguiStruct;
+use crate::utils::math::Vec3;
 
+//
 // `App` holds the state of the application, including all Vulkan objects that need to persist between frames.
 pub struct App {
     window: Option<Arc<Window>>,
@@ -57,6 +69,11 @@ pub struct App {
     vertex_buffer: Option<Subbuffer<[MyVertex]>>,
     pipeline: Option<Arc<GraphicsPipeline>>,
     egui: Option<EguiStruct>,
+    mvp_buffer: Option<Subbuffer<MVP>>,
+    descriptor_set_allocator: Option<Arc<StandardDescriptorSetAllocator>>,
+    descriptor_set: Option<Arc<DescriptorSet>>,
+    memory_allocator: Option<Arc<StandardMemoryAllocator>>,
+    camera: Option<Camera>,
 }
 
 impl Default for App {
@@ -81,6 +98,11 @@ impl Default for App {
             vertex_buffer: None,
             pipeline: None,
             egui: None,
+            mvp_buffer: None,
+            descriptor_set_allocator: None,
+            descriptor_set: None,
+            memory_allocator: None,
+            camera: None,
         }
     }
 }
@@ -101,7 +123,8 @@ impl ApplicationHandler for App {
         self.device = Some(device.clone());
         self.queue = Some(queue.clone());
 
-        let (swapchain, images) = create_swapchain(device.clone(), surface.clone(), window.inner_size().into());
+        let (swapchain, images) =
+            create_swapchain(device.clone(), surface.clone(), window.inner_size().into());
         self.swapchain = Some(swapchain.clone());
         self.images = Some(images.clone());
 
@@ -111,15 +134,41 @@ impl ApplicationHandler for App {
         ));
         self.command_buffer_allocator = Some(command_buffer_allocator);
 
-        // Creating vertices for the triangle.
-        let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
-        let vertex_buffer = create_vertex_buffer(memory_allocator);
-        self.vertex_buffer = Some(vertex_buffer);
-        // End of creating vertices for the triangle.
-
         // Define the render pass from display.rs
         let render_pass = create_render_pass(device.clone());
         self.render_pass = Some(render_pass.clone());
+
+        // Creating vertices for the triangle, MVP buffer, and memory allocator for it.
+        let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
+        self.memory_allocator = Some(memory_allocator.clone());
+
+        let vertex_buffer = create_vertex_buffer(self.memory_allocator.as_ref().unwrap().clone());
+        self.vertex_buffer = Some(vertex_buffer);
+
+        self.camera = Some(Camera::from_pos(2.5, 2.5, 2.5));
+
+        let mvp_buffer = Buffer::from_data(
+            self.memory_allocator.as_ref().unwrap().clone(),
+            BufferCreateInfo {
+                usage: BufferUsage::UNIFORM_BUFFER,
+                ..Default::default()
+            },
+            AllocationCreateInfo {
+                memory_type_filter: MemoryTypeFilter::PREFER_HOST
+                    | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                ..Default::default()
+            },
+            MVP::default(),
+        )
+        .unwrap();
+
+        let framebuffers = window_size_dependent_setup(
+            &images,
+            render_pass.clone(),
+            &mut self.viewport,
+            self.memory_allocator.as_ref().unwrap(), // Arc, not &Arc
+        );
+        // End of creating vertices for the triangle.
 
         self.egui = Some(EguiStruct::new(
             event_loop,
@@ -127,6 +176,15 @@ impl ApplicationHandler for App {
             queue,
             Subpass::from(render_pass.clone(), 1).unwrap(),
         ));
+
+        let depth_stencil_state = DepthStencilState {
+            depth: Some(vulkano::pipeline::graphics::depth_stencil::DepthState {
+                write_enable: true,
+                compare_op: vulkano::pipeline::graphics::depth_stencil::CompareOp::Less,
+                //..Default::default()
+            }),
+            ..Default::default()
+        };
 
         // Loading the vertex and fragment shaders
         mod vs {
@@ -168,7 +226,8 @@ impl ApplicationHandler for App {
                 PipelineDescriptorSetLayoutCreateInfo::from_stages(&stages)
                     .into_pipeline_layout_create_info(device.clone())
                     .unwrap(),
-            ).unwrap();
+            )
+            .unwrap();
 
             let subpass = Subpass::from(render_pass.clone(), 0).unwrap();
 
@@ -178,6 +237,7 @@ impl ApplicationHandler for App {
                 GraphicsPipelineCreateInfo {
                     stages: stages.into_iter().collect(),
                     vertex_input_state: Some(vertex_input_state),
+                    depth_stencil_state: Some(depth_stencil_state),
                     input_assembly_state: Some(InputAssemblyState::default()),
                     viewport_state: Some(ViewportState {
                         viewports: [viewport].into_iter().collect(),
@@ -192,10 +252,33 @@ impl ApplicationHandler for App {
                     subpass: Some(subpass.into()),
                     ..GraphicsPipelineCreateInfo::layout(layout)
                 },
-            ).unwrap()
+            )
+            .unwrap()
         };
-        self.pipeline = Some(pipeline);
-        let framebuffers = window_size_dependent_setup(&images, render_pass.clone(), &mut self.viewport);
+        self.pipeline = Some(pipeline.clone()); // store
+
+        let descriptor_set_allocator = Arc::new(StandardDescriptorSetAllocator::new(
+            device.clone(),
+            StandardDescriptorSetAllocatorCreateInfo::default(),
+        ));
+        let layout = pipeline.layout().set_layouts()[0].clone();
+        let set = DescriptorSet::new(
+            descriptor_set_allocator.clone(),
+            layout.clone(),
+            [WriteDescriptorSet::buffer(0, mvp_buffer.clone())],
+            [],
+        )
+        .unwrap();
+
+        self.descriptor_set_allocator = Some(descriptor_set_allocator);
+        self.descriptor_set = Some(set);
+
+        let framebuffers = window_size_dependent_setup(
+            &images,
+            render_pass.clone(),
+            &mut self.viewport,
+            &memory_allocator,
+        );
         self.framebuffers = Some(framebuffers);
         self.recreate_swapchain = false;
         self.previous_frame_end = Some(sync::now(device.clone()).boxed());
@@ -220,6 +303,30 @@ impl ApplicationHandler for App {
             }
             WindowEvent::RedrawRequested => {
                 egui.redraw();
+
+                let layout = self.pipeline.clone().unwrap().layout().set_layouts()[0].clone(); // use
+
+                let mvp_buffer = Buffer::from_data(
+                    self.memory_allocator.as_ref().unwrap().clone(),
+                    BufferCreateInfo {
+                        usage: BufferUsage::UNIFORM_BUFFER,
+                        ..Default::default()
+                    },
+                    AllocationCreateInfo {
+                        memory_type_filter: MemoryTypeFilter::PREFER_HOST
+                            | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                        ..Default::default()
+                    },
+                    MVP::default().apply_camera_transforms(self.camera.unwrap()),
+                )
+                .unwrap();
+                let set = DescriptorSet::new(
+                    self.descriptor_set_allocator.clone().unwrap().clone(),
+                    layout.clone(),
+                    [WriteDescriptorSet::buffer(0, mvp_buffer.clone())],
+                    [],
+                )
+                .unwrap();
                 if self.previous_frame_end.is_none() {
                     return;
                 }
@@ -249,6 +356,7 @@ impl ApplicationHandler for App {
                         &new_images,
                         render_pass.clone(),
                         &mut self.viewport,
+                        self.memory_allocator.as_ref().unwrap(),
                     ));
                     self.recreate_swapchain = false;
                 }
@@ -279,6 +387,8 @@ impl ApplicationHandler for App {
                 }
 
                 // Build the command buffer for this frame's drawing commands.
+                let image_extent: [u32; 2] = window.inner_size().into(); // Image extent
+
                 let mut cmd_buffer_builder = AutoCommandBufferBuilder::primary(
                     command_buffer_allocator.clone(),
                     queue.queue_family_index(),
@@ -289,7 +399,10 @@ impl ApplicationHandler for App {
                 cmd_buffer_builder
                     .begin_render_pass(
                         RenderPassBeginInfo {
-                            clear_values: vec![Some([0.0, 0.68, 1.0, 1.0].into())],
+                            clear_values: vec![
+                                Some([0.0, 0.68, 1.0, 1.0].into()), // for color
+                                Some(1.0_f32.into()),               // depth
+                            ],
                             ..RenderPassBeginInfo::framebuffer(
                                 framebuffers[image_i as usize].clone(),
                             )
@@ -303,13 +416,22 @@ impl ApplicationHandler for App {
                     .bind_pipeline_graphics(self.pipeline.as_ref().unwrap().clone())
                     .unwrap()
                     .bind_vertex_buffers(0, self.vertex_buffer.as_ref().unwrap().clone())
+                    .unwrap()
+                    .bind_descriptor_sets(
+                        vulkano::pipeline::PipelineBindPoint::Graphics,
+                        self.pipeline.as_ref().unwrap().layout().clone(),
+                        0,
+                        set.clone(),
+                    )
                     .unwrap();
 
+                // Wrap draw call in an unsafe block so it works :|
                 unsafe {
-                    cmd_buffer_builder.draw(self.vertex_buffer.as_ref().unwrap().len() as u32, 1, 0, 0).unwrap();
+                    cmd_buffer_builder
+                        .draw(self.vertex_buffer.as_ref().unwrap().len() as u32, 1, 0, 0)
+                        .unwrap();
                 }
 
-                let image_extent: [u32; 2] = window.inner_size().into();
                 cmd_buffer_builder
                     .next_subpass(
                         SubpassEndInfo::default(),

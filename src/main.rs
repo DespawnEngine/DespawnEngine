@@ -1,5 +1,6 @@
 mod arguments;
 mod engine;
+mod utils;
 
 use engine::core::app::App;
 use winit::{
