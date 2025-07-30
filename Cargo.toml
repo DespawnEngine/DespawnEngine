@@ -5,7 +5,8 @@ edition = "2024"
 
 [dependencies]
 clap = { version = "4.5.41", features = ["derive"] }
-egui = { version = "0.32.0", features = ["default_fonts"] }
+egui = { version = "0.31.0", features = ["default_fonts"] }
+egui_plot = "0.32.1"
 egui_winit_vulkano = "0.28.0"
 glam = "0.30.4"
 image = "0.25.6"
