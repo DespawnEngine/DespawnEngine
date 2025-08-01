@@ -48,6 +48,7 @@ use crate::engine::rendering::{
     camera::Camera,
     display::{create_main_window, create_render_pass, create_vertex_buffer},
 };
+use crate::engine::rendering::display::InputState;
 use crate::engine::ui::egui_integration::EguiStruct;
 use crate::utils::math::Vec3;
 
@@ -74,6 +75,8 @@ pub struct App {
     descriptor_set: Option<Arc<DescriptorSet>>,
     memory_allocator: Option<Arc<StandardMemoryAllocator>>,
     camera: Option<Camera>,
+    input_state: Option<InputState>,
+    last_frame_time: Option<std::time::Instant>,
 }
 
 impl Default for App {
@@ -103,6 +106,8 @@ impl Default for App {
             descriptor_set: None,
             memory_allocator: None,
             camera: None,
+            input_state: None,
+            last_frame_time: None,
         }
     }
 }
@@ -303,6 +308,38 @@ impl ApplicationHandler for App {
             }
             WindowEvent::RedrawRequested => {
                 egui.redraw();
+
+                // Calculate delta_time (example using std::time::Instant stored in self)
+                let now = std::time::Instant::now();
+                let delta_time = if let Some(last_frame_time) = self.last_frame_time {
+                    let dt = now.duration_since(last_frame_time).as_secs_f32();
+                    dt.min(0.1) // clamp max delta to avoid big jumps
+                } else {
+                    1.0 / 60.0 // default first frame delta
+                };
+                self.last_frame_time = Some(now);
+
+                // Update the camera with current input state and delta time
+                if let (Some(camera), Some(input_state)) = (self.camera.as_mut(), self.input_state.as_ref()) {
+                    camera.update(delta_time, input_state);
+                }
+
+                // Now create the MVP buffer from updated camera
+                let mvp_buffer = Buffer::from_data(
+                    self.memory_allocator.as_ref().unwrap().clone(),
+                    BufferCreateInfo {
+                        usage: BufferUsage::UNIFORM_BUFFER,
+                        ..Default::default()
+                    },
+                    AllocationCreateInfo {
+                        memory_type_filter: MemoryTypeFilter::PREFER_HOST
+                            | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                        ..Default::default()
+                    },
+                    MVP::default().apply_camera_transforms(self.camera.unwrap()),
+                )
+                    .unwrap();
+
 
                 let layout = self.pipeline.clone().unwrap().layout().set_layouts()[0].clone(); // use
 
