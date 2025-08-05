@@ -1,4 +1,4 @@
-use egui_winit_vulkano::egui::{self, Context, RichText, FontDefinitions, ProgressBar};
+use egui::{self, Context, RichText, FontDefinitions, ProgressBar};
 use sysinfo::System;
 use std::sync::Arc;
 use vulkano::device::Queue;

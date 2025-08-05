@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use egui_winit_vulkano::{
-    egui::{self, FontDefinitions},
     Gui, GuiConfig,
 };
 use vulkano::{
