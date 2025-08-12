@@ -1,3 +1,4 @@
+use std::default;
 use std::sync::Arc;
 
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
@@ -40,6 +41,7 @@ use winit::{
 };
 
 use crate::engine::rendering::camera;
+use crate::engine::rendering::display::{handle_events, InputState};
 use crate::engine::rendering::mvp::MVP;
 use crate::engine::rendering::vertex::MyVertex;
 use crate::engine::rendering::vswapchain::{create_swapchain, window_size_dependent_setup};
@@ -48,7 +50,6 @@ use crate::engine::rendering::{
     camera::Camera,
     display::{create_main_window, create_render_pass, create_vertex_buffer},
 };
-use crate::engine::rendering::display::InputState;
 use crate::engine::ui::egui_integration::EguiStruct;
 use crate::utils::math::Vec3;
 
@@ -150,7 +151,7 @@ impl ApplicationHandler for App {
         let vertex_buffer = create_vertex_buffer(self.memory_allocator.as_ref().unwrap().clone());
         self.vertex_buffer = Some(vertex_buffer);
 
-        self.camera = Some(Camera::from_pos(2.5, 2.5, 2.5));
+        self.camera = Some(Camera::from_pos(2.5, -2.5, 2.5));
 
         let mvp_buffer = Buffer::from_data(
             self.memory_allocator.as_ref().unwrap().clone(),
@@ -165,7 +166,7 @@ impl ApplicationHandler for App {
             },
             MVP::default(),
         )
-        .unwrap();
+            .unwrap();
 
         let framebuffers = window_size_dependent_setup(
             &images,
@@ -232,7 +233,7 @@ impl ApplicationHandler for App {
                     .into_pipeline_layout_create_info(device.clone())
                     .unwrap(),
             )
-            .unwrap();
+                .unwrap();
 
             let subpass = Subpass::from(render_pass.clone(), 0).unwrap();
 
@@ -258,7 +259,7 @@ impl ApplicationHandler for App {
                     ..GraphicsPipelineCreateInfo::layout(layout)
                 },
             )
-            .unwrap()
+                .unwrap()
         };
         self.pipeline = Some(pipeline.clone()); // store
 
@@ -273,7 +274,7 @@ impl ApplicationHandler for App {
             [WriteDescriptorSet::buffer(0, mvp_buffer.clone())],
             [],
         )
-        .unwrap();
+            .unwrap();
 
         self.descriptor_set_allocator = Some(descriptor_set_allocator);
         self.descriptor_set = Some(set);
@@ -287,6 +288,7 @@ impl ApplicationHandler for App {
         self.framebuffers = Some(framebuffers);
         self.recreate_swapchain = false;
         self.previous_frame_end = Some(sync::now(device.clone()).boxed());
+        self.input_state = Some(InputState::default());
     }
 
     fn window_event(
@@ -297,6 +299,8 @@ impl ApplicationHandler for App {
     ) {
         let egui = self.egui.as_mut().unwrap();
         egui.update(&event);
+
+        handle_events(event.clone(), self.input_state.as_mut().unwrap());
         match event {
             WindowEvent::CloseRequested => {
                 event_loop.exit();
@@ -320,7 +324,9 @@ impl ApplicationHandler for App {
                 self.last_frame_time = Some(now);
 
                 // Update the camera with current input state and delta time
-                if let (Some(camera), Some(input_state)) = (self.camera.as_mut(), self.input_state.as_ref()) {
+                if let (Some(camera), Some(input_state)) =
+                    (self.camera.as_mut(), self.input_state.as_mut())
+                {
                     camera.update(delta_time, input_state);
                 }
 
@@ -340,7 +346,6 @@ impl ApplicationHandler for App {
                 )
                     .unwrap();
 
-
                 let layout = self.pipeline.clone().unwrap().layout().set_layouts()[0].clone(); // use
 
                 let mvp_buffer = Buffer::from_data(
@@ -356,14 +361,14 @@ impl ApplicationHandler for App {
                     },
                     MVP::default().apply_camera_transforms(self.camera.unwrap()),
                 )
-                .unwrap();
+                    .unwrap();
                 let set = DescriptorSet::new(
                     self.descriptor_set_allocator.clone().unwrap().clone(),
                     layout.clone(),
                     [WriteDescriptorSet::buffer(0, mvp_buffer.clone())],
                     [],
                 )
-                .unwrap();
+                    .unwrap();
                 if self.previous_frame_end.is_none() {
                     return;
                 }
@@ -431,7 +436,7 @@ impl ApplicationHandler for App {
                     queue.queue_family_index(),
                     CommandBufferUsage::OneTimeSubmit,
                 )
-                .unwrap();
+                    .unwrap();
 
                 cmd_buffer_builder
                     .begin_render_pass(

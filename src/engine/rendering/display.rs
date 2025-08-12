@@ -1,17 +1,17 @@
-use std::sync::Arc;
-use winit::window::{Icon, Window};
+use crate::arguments;
+use crate::engine::rendering::vertex::MyVertex;
 use image::GenericImageView;
+use std::sync::Arc;
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer};
 use vulkano::device::Device;
 use vulkano::format::Format;
 use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
 use vulkano::render_pass::RenderPass;
-use winit::event::{ElementState, Event, WindowEvent};
 use winit::event::WindowEvent::KeyboardInput;
+use winit::event::{ElementState, Event, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
-use crate::arguments;
-use crate::engine::rendering::vertex::MyVertex;
 use winit::keyboard::{KeyCode, PhysicalKey};
+use winit::window::{Icon, Window};
 // "image" crate uses this for loading images
 
 // This display script will contain almost all window functionality later, hopefully. Need to make sure I didn't break linux though first.
@@ -69,25 +69,47 @@ pub fn create_render_pass(device: Arc<Device>) -> Arc<RenderPass> {
                 input: []
             }
         ]
-    ).unwrap()
+    )
+    .unwrap()
 }
 
 // Create vertex buffer and simple cube rendering
-pub fn create_vertex_buffer(
-    allocator: Arc<StandardMemoryAllocator>,
-) -> Subbuffer<[MyVertex]> {
+pub fn create_vertex_buffer(allocator: Arc<StandardMemoryAllocator>) -> Subbuffer<[MyVertex]> {
     let vertex_data = [
         // Front face
-        MyVertex { position: [-0.5, -0.5,  0.5].into(), color: [1.0, 0.0, 0.0].into() },
-        MyVertex { position: [ 0.5, -0.5,  0.5].into(), color: [0.0, 1.0, 0.0].into() },
-        MyVertex { position: [ 0.5,  0.5,  0.5].into(), color: [0.0, 0.0, 1.0].into() },
-        MyVertex { position: [-0.5,  0.5,  0.5].into(), color: [1.0, 1.0, 0.0].into() },
-
+        MyVertex {
+            position: [-0.5, -0.5, 0.5].into(),
+            color: [1.0, 0.0, 0.0].into(),
+        },
+        MyVertex {
+            position: [0.5, -0.5, 0.5].into(),
+            color: [0.0, 1.0, 0.0].into(),
+        },
+        MyVertex {
+            position: [0.5, 0.5, 0.5].into(),
+            color: [0.0, 0.0, 1.0].into(),
+        },
+        MyVertex {
+            position: [-0.5, 0.5, 0.5].into(),
+            color: [1.0, 1.0, 0.0].into(),
+        },
         // Back face
-        MyVertex { position: [-0.5, -0.5, -0.5].into(), color: [1.0, 0.0, 1.0].into() },
-        MyVertex { position: [ 0.5, -0.5, -0.5].into(), color: [0.0, 1.0, 1.0].into() },
-        MyVertex { position: [ 0.5,  0.5, -0.5].into(), color: [0.5, 0.5, 0.5].into() },
-        MyVertex { position: [-0.5,  0.5, -0.5].into(), color: [1.0, 1.0, 1.0].into() },
+        MyVertex {
+            position: [-0.5, -0.5, -0.5].into(),
+            color: [1.0, 0.0, 1.0].into(),
+        },
+        MyVertex {
+            position: [0.5, -0.5, -0.5].into(),
+            color: [0.0, 1.0, 1.0].into(),
+        },
+        MyVertex {
+            position: [0.5, 0.5, -0.5].into(),
+            color: [0.5, 0.5, 0.5].into(),
+        },
+        MyVertex {
+            position: [-0.5, 0.5, -0.5].into(),
+            color: [1.0, 1.0, 1.0].into(),
+        },
     ];
 
     // Define triangles using these vertices
@@ -102,7 +124,7 @@ pub fn create_vertex_buffer(
 
     let full_vertex_data: Vec<MyVertex> = index_order
         .iter()
-        .map(|&i| vertex_data[i].clone())
+        .map(|&i| vertex_data[i])
         .collect();
 
     Buffer::from_iter(
@@ -117,13 +139,11 @@ pub fn create_vertex_buffer(
             ..Default::default()
         },
         full_vertex_data,
-    ).unwrap()
+    )
+    .unwrap()
 }
 
-
-
-pub fn handle_events(event: Event<()>, input_state: &mut InputState) {
-    if let Event::WindowEvent { event, .. } = event {
+pub fn handle_events(event: WindowEvent, input_state: &mut InputState) {
         match event {
             WindowEvent::KeyboardInput { event, .. } => {
                 if let PhysicalKey::Code(keycode) = event.physical_key {
@@ -134,27 +154,43 @@ pub fn handle_events(event: Event<()>, input_state: &mut InputState) {
                         KeyCode::KeyA => input_state.a_pressed = pressed,
                         KeyCode::KeyD => input_state.d_pressed = pressed,
                         KeyCode::Space => input_state.space_pressed = pressed,
-                        KeyCode::ShiftLeft | KeyCode::ShiftRight => input_state.shift_pressed = pressed,
+                        KeyCode::ShiftLeft | KeyCode::ShiftRight => {
+                            input_state.shift_pressed = pressed
+                        }
                         _ => {}
                     }
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
-                let new_x = position.x as f32;
-                let new_y = position.y as f32;
+                //let new_x = position.x as f32;
+                //let new_y = position.y as f32;
 
-                input_state.mouse_delta_x = new_x - input_state.last_mouse_x;
-                input_state.mouse_delta_y = new_y - input_state.last_mouse_y;
+                //input_state.mouse_delta_x = new_x - input_state.last_mouse_x;
+                //input_state.mouse_delta_y = new_y - input_state.last_mouse_y;
 
-                input_state.last_mouse_x = new_x;
-                input_state.last_mouse_y = new_y;
+                //input_state.last_mouse_x = new_x;
+                //input_state.last_mouse_y = new_y;
             }
             _ => {}
         }
-    }
 }
 
-
+impl Default for InputState {
+    fn default() -> Self {
+        InputState {
+            w_pressed: false,
+            s_pressed: false,
+            a_pressed: false,
+            d_pressed:false, 
+            space_pressed: false,
+            shift_pressed: false,
+            mouse_delta_x: 0.0,
+            mouse_delta_y: 0.0,
+            last_mouse_x: 0.0,
+            last_mouse_y: 0.0,
+        }
+    }
+}
 
 // Helper function for loading an icon for the window icon. Code will likely be changed, but I wanted to experiment to learn more.
 pub fn load_icon(path: &str) -> Icon {
