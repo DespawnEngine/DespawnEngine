@@ -1,5 +1,5 @@
 use glam::{Quat, Vec3};
-use crate::engine::rendering::display::InputState;
+use crate::engine::core::input::InputState;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Camera {
@@ -70,8 +70,10 @@ impl Camera {
         }
 
         // Mouse rotation
-        let new_yaw = self.yaw();
-        let new_pitch = self.pitch();
+        let new_yaw = self.yaw() - input.mouse_delta_x;
+        let new_pitch = self.pitch() + input.mouse_delta_y;
+
+        println!("{:?}", input);
 
         self.rotation_quat = Quat::from_euler(glam::EulerRot::YXZ,  new_yaw.to_radians(), new_pitch.to_radians(), 0.0);
     }

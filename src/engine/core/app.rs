@@ -1,4 +1,5 @@
 use std::default;
+use std::ops::Not;
 use std::sync::Arc;
 
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
@@ -6,6 +7,7 @@ use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocatorCreateInfo;
 use vulkano::descriptor_set::DescriptorSet;
 use vulkano::descriptor_set::WriteDescriptorSet;
+use vulkano::device::Device;
 use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter};
 use vulkano::pipeline::graphics::depth_stencil::DepthStencilState;
 use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
@@ -35,13 +37,16 @@ use vulkano::{
     sync::{self, GpuFuture},
     Validated, VulkanError,
 };
+use winit::dpi::{LogicalPosition, PhysicalPosition};
+use winit::event::{DeviceEvent, DeviceId};
+use winit::event_loop::DeviceEvents;
+use winit::window::CursorGrabMode;
 use winit::{
     application::ApplicationHandler, event::WindowEvent, event_loop::ActiveEventLoop,
     window::Window,
 };
 
-use crate::engine::rendering::camera;
-use crate::engine::rendering::display::{handle_events, InputState};
+use crate::engine::core::input::InputState;
 use crate::engine::rendering::mvp::MVP;
 use crate::engine::rendering::vertex::MyVertex;
 use crate::engine::rendering::vswapchain::{create_swapchain, window_size_dependent_setup};
@@ -51,7 +56,6 @@ use crate::engine::rendering::{
     display::{create_main_window, create_render_pass, create_vertex_buffer},
 };
 use crate::engine::ui::egui_integration::EguiStruct;
-use crate::utils::math::Vec3;
 
 //
 // `App` holds the state of the application, including all Vulkan objects that need to persist between frames.
@@ -78,6 +82,7 @@ pub struct App {
     camera: Option<Camera>,
     input_state: Option<InputState>,
     last_frame_time: Option<std::time::Instant>,
+    capture_cursor: bool,
 }
 
 impl Default for App {
@@ -109,6 +114,7 @@ impl Default for App {
             camera: None,
             input_state: None,
             last_frame_time: None,
+            capture_cursor: true,
         }
     }
 }
@@ -166,7 +172,7 @@ impl ApplicationHandler for App {
             },
             MVP::default(),
         )
-            .unwrap();
+        .unwrap();
 
         let framebuffers = window_size_dependent_setup(
             &images,
@@ -191,7 +197,6 @@ impl ApplicationHandler for App {
             }),
             ..Default::default()
         };
-
         // Loading the vertex and fragment shaders
         mod vs {
             vulkano_shaders::shader! {
@@ -233,7 +238,7 @@ impl ApplicationHandler for App {
                     .into_pipeline_layout_create_info(device.clone())
                     .unwrap(),
             )
-                .unwrap();
+            .unwrap();
 
             let subpass = Subpass::from(render_pass.clone(), 0).unwrap();
 
@@ -259,7 +264,7 @@ impl ApplicationHandler for App {
                     ..GraphicsPipelineCreateInfo::layout(layout)
                 },
             )
-                .unwrap()
+            .unwrap()
         };
         self.pipeline = Some(pipeline.clone()); // store
 
@@ -274,7 +279,7 @@ impl ApplicationHandler for App {
             [WriteDescriptorSet::buffer(0, mvp_buffer.clone())],
             [],
         )
-            .unwrap();
+        .unwrap();
 
         self.descriptor_set_allocator = Some(descriptor_set_allocator);
         self.descriptor_set = Some(set);
@@ -291,6 +296,25 @@ impl ApplicationHandler for App {
         self.input_state = Some(InputState::default());
     }
 
+    fn device_event(
+        &mut self,
+        _event_loop: &ActiveEventLoop,
+        _device_id: DeviceId,
+        event: DeviceEvent,
+    ) {
+        match event {
+            DeviceEvent::MouseMotion { delta } => {
+                if self.capture_cursor {
+                    self.input_state
+                        .as_mut()
+                        .expect("failed to get input state")
+                        .update_mouse(delta)
+                }
+            }
+            _ => (),
+        }
+    }
+
     fn window_event(
         &mut self,
         event_loop: &ActiveEventLoop,
@@ -300,7 +324,38 @@ impl ApplicationHandler for App {
         let egui = self.egui.as_mut().unwrap();
         egui.update(&event);
 
-        handle_events(event.clone(), self.input_state.as_mut().unwrap());
+        self.input_state
+            .as_mut()
+            .unwrap()
+            .handle_events(event.clone());
+
+        if self.input_state.as_ref().expect("failed to get input state").esc_pressed{
+            self.capture_cursor = self.capture_cursor.not();
+        }
+
+        if self.capture_cursor {
+            self.window
+                .as_mut()
+                .expect("failed to get window")
+                .set_cursor_grab(CursorGrabMode::Locked)
+                .expect("failed to set cursor grab mode to locked");
+            self.window
+                .as_mut()
+                .expect("failed to get window")
+                .set_cursor_visible(false);
+        } else {
+            self.window
+                .as_mut()
+                .expect("failed to get window")
+                .set_cursor_grab(CursorGrabMode::None)
+                .expect("failed to set cursor grab mode to None");
+
+            self.window
+                .as_mut()
+                .expect("failed to get window")
+                .set_cursor_visible(true);
+        }
+
         match event {
             WindowEvent::CloseRequested => {
                 event_loop.exit();
@@ -344,7 +399,7 @@ impl ApplicationHandler for App {
                     },
                     MVP::default().apply_camera_transforms(self.camera.unwrap()),
                 )
-                    .unwrap();
+                .unwrap();
 
                 let layout = self.pipeline.clone().unwrap().layout().set_layouts()[0].clone(); // use
 
@@ -361,14 +416,14 @@ impl ApplicationHandler for App {
                     },
                     MVP::default().apply_camera_transforms(self.camera.unwrap()),
                 )
-                    .unwrap();
+                .unwrap();
                 let set = DescriptorSet::new(
                     self.descriptor_set_allocator.clone().unwrap().clone(),
                     layout.clone(),
                     [WriteDescriptorSet::buffer(0, mvp_buffer.clone())],
                     [],
                 )
-                    .unwrap();
+                .unwrap();
                 if self.previous_frame_end.is_none() {
                     return;
                 }
@@ -436,7 +491,7 @@ impl ApplicationHandler for App {
                     queue.queue_family_index(),
                     CommandBufferUsage::OneTimeSubmit,
                 )
-                    .unwrap();
+                .unwrap();
 
                 cmd_buffer_builder
                     .begin_render_pass(
@@ -523,6 +578,10 @@ impl ApplicationHandler for App {
                         self.previous_frame_end = Some(sync::now(device.clone()).boxed());
                     }
                 }
+                self.input_state
+                    .as_mut()
+                    .expect("failed to unwrap input state")
+                    .reset_deltas();
             }
             _ => (),
         }
