@@ -20,11 +20,11 @@ pub struct Vec3([f32; 3]);
 #[repr(C)]
 pub struct Vec4([f32; 4]);
 
-#[derive(BufferContents, Copy, Clone, Debug, Default)]
+#[derive(BufferContents, Copy, Clone, Debug)]
 #[repr(C)]
 pub struct Mat4([Vec4; 4]);
 
-#[derive(BufferContents, Copy, Clone, Debug, Default)]
+#[derive(BufferContents, Copy, Clone, Debug)]
 #[repr(C)]
 pub struct Quat(Vec4);
 
@@ -62,6 +62,18 @@ impl Quat {
         .into()
     }
 
+}
+
+impl Default for Mat4{
+    fn default() -> Self {
+        Mat4::IDENTITY   
+    }
+}
+
+impl Default for Quat{
+    fn default() -> Self {
+        Quat::IDENTITY
+    }
 }
 
 // Taken from

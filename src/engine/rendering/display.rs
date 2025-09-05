@@ -60,39 +60,15 @@ pub fn create_render_pass(device: Arc<Device>) -> Arc<RenderPass> {
 pub fn create_vertex_buffer(allocator: Arc<StandardMemoryAllocator>) -> Subbuffer<[MyVertex]> {
     let vertex_data = [
         // Front face
-        MyVertex {
-            position: [-0.5, -0.5, 0.5].into(),
-            color: [1.0, 0.0, 0.0].into(),
-        },
-        MyVertex {
-            position: [0.5, -0.5, 0.5].into(),
-            color: [0.0, 1.0, 0.0].into(),
-        },
-        MyVertex {
-            position: [0.5, 0.5, 0.5].into(),
-            color: [0.0, 0.0, 1.0].into(),
-        },
-        MyVertex {
-            position: [-0.5, 0.5, 0.5].into(),
-            color: [1.0, 1.0, 0.0].into(),
-        },
+        MyVertex::new([-0.5, -0.5, 0.5], [1.0, 0.0, 0.0]),
+        MyVertex::new([0.5, -0.5, 0.5], [0.0, 1.0, 0.0]),
+        MyVertex::new([0.5, 0.5, 0.5], [0.0, 0.0, 1.0]),
+        MyVertex::new([-0.5, 0.5, 0.5], [1.0, 1.0, 0.0]),
         // Back face
-        MyVertex {
-            position: [-0.5, -0.5, -0.5].into(),
-            color: [1.0, 0.0, 1.0].into(),
-        },
-        MyVertex {
-            position: [0.5, -0.5, -0.5].into(),
-            color: [0.0, 1.0, 1.0].into(),
-        },
-        MyVertex {
-            position: [0.5, 0.5, -0.5].into(),
-            color: [0.5, 0.5, 0.5].into(),
-        },
-        MyVertex {
-            position: [-0.5, 0.5, -0.5].into(),
-            color: [1.0, 1.0, 1.0].into(),
-        },
+        MyVertex::new([-0.5, -0.5, -0.5], [1.0, 0.0, 1.0]),
+        MyVertex::new([0.5, -0.5, -0.5], [0.0, 1.0, 1.0]),
+        MyVertex::new([0.5, 0.5, -0.5], [0.5, 0.5, 0.5]),
+        MyVertex::new([-0.5, 0.5, -0.5], [1.0, 1.0, 1.0]),
     ];
 
     // Define triangles using these vertices
@@ -105,10 +81,7 @@ pub fn create_vertex_buffer(allocator: Arc<StandardMemoryAllocator>) -> Subbuffe
         4, 5, 1, 1, 0, 4, // bottom
     ];
 
-    let full_vertex_data: Vec<MyVertex> = index_order
-        .iter()
-        .map(|&i| vertex_data[i])
-        .collect();
+    let full_vertex_data: Vec<MyVertex> = index_order.iter().map(|&i| vertex_data[i]).collect();
 
     Buffer::from_iter(
         allocator.clone(),
@@ -125,7 +98,6 @@ pub fn create_vertex_buffer(allocator: Arc<StandardMemoryAllocator>) -> Subbuffe
     )
     .unwrap()
 }
-
 
 // Helper function for loading an icon for the window icon. Code will likely be changed, but I wanted to experiment to learn more.
 pub fn load_icon(path: &str) -> Icon {

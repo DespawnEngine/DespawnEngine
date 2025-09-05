@@ -1,5 +1,9 @@
+use std::cmp::min;
+
 use glam::{Quat, Vec3};
 use crate::engine::core::input::InputState;
+
+const MAX_PITCH_DEG: f32 = 89.99;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Camera {
@@ -9,13 +13,23 @@ pub struct Camera {
     pub sensitivity: f32,
 }
 
+impl Default for Camera{
+    fn default() -> Self {
+        Camera { 
+            position: Vec3::default(),
+            rotation_quat: Quat::default(),
+            speed: 5.0,
+            sensitivity: 1.0, 
+        }
+    }
+}
+
 impl Camera {
     pub fn from_pos(pos_x: f32, pos_y: f32, pos_z: f32) -> Self {
         Camera {
             position: Vec3::new(pos_x, pos_y, pos_z),
             rotation_quat: Quat::from_euler(glam::EulerRot::YXZ, 45.0f32.to_radians(), 45.0f32.to_radians(), 0.0),
-            speed: 5.0,
-            sensitivity: 0.1,
+            ..Default::default()
         }
     }
 
@@ -29,9 +43,7 @@ impl Camera {
     pub fn from_vec3_pos(position: Vec3) -> Self {
         Camera {
             position,
-            rotation_quat: Quat::IDENTITY,
-            speed: 5.0,
-            sensitivity: 0.1,
+            ..Default::default()
         }
     }
 
@@ -39,8 +51,7 @@ impl Camera {
         Camera {
             position,
             rotation_quat,
-            speed: 5.0,
-            sensitivity: 0.1,
+            ..Default::default()
         }
     }
 
@@ -70,10 +81,8 @@ impl Camera {
         }
 
         // Mouse rotation
-        let new_yaw = self.yaw() - input.mouse_delta_x;
-        let new_pitch = self.pitch() + input.mouse_delta_y;
-
-        println!("{:?}", input);
+        let new_yaw = self.yaw() - (input.mouse_delta_x * self.sensitivity);
+        let new_pitch = (self.pitch() + (input.mouse_delta_y * self.sensitivity)).clamp(-MAX_PITCH_DEG, MAX_PITCH_DEG);
 
         self.rotation_quat = Quat::from_euler(glam::EulerRot::YXZ,  new_yaw.to_radians(), new_pitch.to_radians(), 0.0);
     }
