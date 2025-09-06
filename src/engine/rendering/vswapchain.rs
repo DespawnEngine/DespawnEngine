@@ -4,13 +4,13 @@ use vulkano::{
     image::{view::ImageView, Image, ImageUsage},
     pipeline::graphics::viewport::Viewport,
     render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass},
-    swapchain::{CompositeAlpha, Surface, Swapchain, SwapchainCreateInfo},
+    swapchain::{ColorSpace, CompositeAlpha, Surface, Swapchain, SwapchainCreateInfo},
 };
 use vulkano::format::Format;
 use vulkano::image::{ImageCreateInfo, ImageType};
 use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
 
-pub const IMAGE_FORMAT: Format = Format::R8G8B8A8_SRGB;
+pub const IMAGE_FORMAT: Format = Format::B8G8R8A8_SRGB;
 
 pub fn create_swapchain(
     device: Arc<Device>,
@@ -30,6 +30,7 @@ pub fn create_swapchain(
         SwapchainCreateInfo {
             min_image_count: surface_capabilities.min_image_count.max(2),
             image_format: IMAGE_FORMAT,
+            image_color_space: ColorSpace::SrgbNonLinear,
             image_extent,
             image_usage: ImageUsage::COLOR_ATTACHMENT,
             composite_alpha: CompositeAlpha::Opaque,

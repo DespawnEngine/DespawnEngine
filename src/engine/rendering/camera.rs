@@ -1,7 +1,7 @@
 use std::cmp::min;
 
-use glam::{Quat, Vec3};
 use crate::engine::core::input::{InputState, KeyBind};
+use glam::{Quat, Vec3};
 
 const MAX_PITCH_DEG: f32 = 89.99;
 
@@ -13,13 +13,13 @@ pub struct Camera {
     pub sensitivity: f32,
 }
 
-impl Default for Camera{
+impl Default for Camera {
     fn default() -> Self {
-        Camera { 
+        Camera {
             position: Vec3::default(),
             rotation_quat: Quat::default(),
             speed: 5.0,
-            sensitivity: 1.0, 
+            sensitivity: 1.0,
         }
     }
 }
@@ -28,16 +28,27 @@ impl Camera {
     pub fn from_pos(pos_x: f32, pos_y: f32, pos_z: f32) -> Self {
         Camera {
             position: Vec3::new(pos_x, pos_y, pos_z),
-            rotation_quat: Quat::from_euler(glam::EulerRot::YXZ, 45.0f32.to_radians(), 45.0f32.to_radians(), 0.0),
+            rotation_quat: Quat::from_euler(
+                glam::EulerRot::YXZ,
+                45.0f32.to_radians(),
+                45.0f32.to_radians(),
+                0.0,
+            ),
             ..Default::default()
         }
     }
 
     pub fn yaw(&self) -> f32 {
-        self.rotation_quat.to_euler(glam::EulerRot::YXZ).0.to_degrees()
+        self.rotation_quat
+            .to_euler(glam::EulerRot::YXZ)
+            .0
+            .to_degrees()
     }
     pub fn pitch(&self) -> f32 {
-        self.rotation_quat.to_euler(glam::EulerRot::YXZ).1.to_degrees()
+        self.rotation_quat
+            .to_euler(glam::EulerRot::YXZ)
+            .1
+            .to_degrees()
     }
 
     pub fn from_vec3_pos(position: Vec3) -> Self {
@@ -61,29 +72,35 @@ impl Camera {
         let right = self.rotation_quat * Vec3::new(1.0, 0.0, 0.0);
         let up = Vec3::new(0.0, -1.0, 0.0);
 
-        if input.get_keybind_is_pressed(KeyBind::new("DbgForward")){
+        if input.get_keybind_is_pressed(KeyBind::new("DbgForward")) {
             self.position += forward * self.speed * delta_time;
         }
-        if input.get_keybind_is_pressed(KeyBind::new("DbgBackward")){
+        if input.get_keybind_is_pressed(KeyBind::new("DbgBackward")) {
             self.position -= forward * self.speed * delta_time;
         }
-        if input.get_keybind_is_pressed(KeyBind::new("DbgLeft")){
+        if input.get_keybind_is_pressed(KeyBind::new("DbgLeft")) {
             self.position -= right * self.speed * delta_time;
         }
-        if input.get_keybind_is_pressed(KeyBind::new("DbgRight")){
+        if input.get_keybind_is_pressed(KeyBind::new("DbgRight")) {
             self.position += right * self.speed * delta_time;
         }
-        if input.get_keybind_is_pressed(KeyBind::new("DbgUp")){
+        if input.get_keybind_is_pressed(KeyBind::new("DbgUp")) {
             self.position += up * self.speed * delta_time;
         }
-        if input.get_keybind_is_pressed(KeyBind::new("DbgDown")){
+        if input.get_keybind_is_pressed(KeyBind::new("DbgDown")) {
             self.position -= up * self.speed * delta_time;
         }
 
         // Mouse rotation
         let new_yaw = self.yaw() - (input.mouse_delta_x * self.sensitivity);
-        let new_pitch = (self.pitch() + (input.mouse_delta_y * self.sensitivity)).clamp(-MAX_PITCH_DEG, MAX_PITCH_DEG);
+        let new_pitch = (self.pitch() + (input.mouse_delta_y * self.sensitivity))
+            .clamp(-MAX_PITCH_DEG, MAX_PITCH_DEG);
 
-        self.rotation_quat = Quat::from_euler(glam::EulerRot::YXZ,  new_yaw.to_radians(), new_pitch.to_radians(), 0.0);
+        self.rotation_quat = Quat::from_euler(
+            glam::EulerRot::YXZ,
+            new_yaw.to_radians(),
+            new_pitch.to_radians(),
+            0.0,
+        );
     }
 }

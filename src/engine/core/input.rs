@@ -79,7 +79,7 @@ impl InputState {
             .get(&keybind)
             .expect("supplied keybind is not is the keybind states! likely not a real keybind")
     }
-#[inline]
+    #[inline]
     pub fn get_keybind_is_pressed(&self, keybind: KeyBind) -> bool {
         self.get_keybind_state(keybind).is_pressed()
     }
@@ -100,11 +100,11 @@ impl InputState {
         self.set_keybind_state(keybind, self.get_keybind_state(keybind).update_state(state));
     }
 
-    pub fn update_just_pressed_into_held(&mut self){
-        for (keybind, key_state) in self.keybind_states.iter_mut(){
-            *key_state = match key_state{
+    pub fn update_just_pressed_into_held(&mut self) {
+        for (_keybind, key_state) in self.keybind_states.iter_mut() {
+            *key_state = match key_state {
                 KeyState::JustPressed => KeyState::Held,
-                _ => *key_state
+                _ => *key_state,
             }
         }
     }

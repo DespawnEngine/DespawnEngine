@@ -324,13 +324,21 @@ impl ApplicationHandler for App {
         let egui = self.egui.as_mut().unwrap();
         egui.update(&event);
 
-        self.input_state.as_mut().unwrap().update_just_pressed_into_held();
+        self.input_state
+            .as_mut()
+            .unwrap()
+            .update_just_pressed_into_held();
         self.input_state
             .as_mut()
             .unwrap()
             .handle_events(event.clone());
 
-        if self.input_state.as_ref().expect("failed to get input state").get_keybind_is_just_pressed(KeyBind::new("FreeMouse")){
+        if self
+            .input_state
+            .as_ref()
+            .expect("failed to get input state")
+            .get_keybind_is_just_pressed(KeyBind::new("FreeMouse"))
+        {
             self.capture_cursor = self.capture_cursor.not();
         }
 
@@ -338,7 +346,7 @@ impl ApplicationHandler for App {
             self.window
                 .as_mut()
                 .expect("failed to get window")
-                .set_cursor_grab(CursorGrabMode::Locked)
+                .set_cursor_grab(CursorGrabMode::Confined)
                 .expect("failed to set cursor grab mode to locked");
             self.window
                 .as_mut()

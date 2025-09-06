@@ -9,6 +9,8 @@ use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, Standar
 use vulkano::render_pass::RenderPass;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Icon, Window};
+
+use crate::engine::rendering::vswapchain::IMAGE_FORMAT;
 // "image" crate uses this for loading images
 
 // This display script will contain almost all window functionality later, hopefully. Need to make sure I didn't break linux though first.
@@ -28,7 +30,7 @@ pub fn create_render_pass(device: Arc<Device>) -> Arc<RenderPass> {
         device,
         attachments: {
             color: {
-                format: Format::R8G8B8A8_SRGB,
+                format: IMAGE_FORMAT,
                 samples: 1,
                 load_op: Clear,
                 store_op: Store,
