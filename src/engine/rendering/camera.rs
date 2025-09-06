@@ -1,7 +1,7 @@
 use std::cmp::min;
 
 use glam::{Quat, Vec3};
-use crate::engine::core::input::InputState;
+use crate::engine::core::input::{InputState, KeyBind};
 
 const MAX_PITCH_DEG: f32 = 89.99;
 
@@ -61,22 +61,22 @@ impl Camera {
         let right = self.rotation_quat * Vec3::new(1.0, 0.0, 0.0);
         let up = Vec3::new(0.0, -1.0, 0.0);
 
-        if input.w_pressed {
+        if input.get_keybind_is_pressed(KeyBind::new("DbgForward")){
             self.position += forward * self.speed * delta_time;
         }
-        if input.s_pressed {
+        if input.get_keybind_is_pressed(KeyBind::new("DbgBackward")){
             self.position -= forward * self.speed * delta_time;
         }
-        if input.a_pressed {
+        if input.get_keybind_is_pressed(KeyBind::new("DbgLeft")){
             self.position -= right * self.speed * delta_time;
         }
-        if input.d_pressed {
+        if input.get_keybind_is_pressed(KeyBind::new("DbgRight")){
             self.position += right * self.speed * delta_time;
         }
-        if input.space_pressed {
+        if input.get_keybind_is_pressed(KeyBind::new("DbgUp")){
             self.position += up * self.speed * delta_time;
         }
-        if input.shift_pressed {
+        if input.get_keybind_is_pressed(KeyBind::new("DbgDown")){
             self.position -= up * self.speed * delta_time;
         }
 

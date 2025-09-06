@@ -46,7 +46,7 @@ use winit::{
     window::Window,
 };
 
-use crate::engine::core::input::InputState;
+use crate::engine::core::input::{InputState, KeyBind};
 use crate::engine::rendering::mvp::MVP;
 use crate::engine::rendering::vertex::MyVertex;
 use crate::engine::rendering::vswapchain::{create_swapchain, window_size_dependent_setup};
@@ -324,12 +324,13 @@ impl ApplicationHandler for App {
         let egui = self.egui.as_mut().unwrap();
         egui.update(&event);
 
+        self.input_state.as_mut().unwrap().update_just_pressed_into_held();
         self.input_state
             .as_mut()
             .unwrap()
             .handle_events(event.clone());
 
-        if self.input_state.as_ref().expect("failed to get input state").esc_pressed{
+        if self.input_state.as_ref().expect("failed to get input state").get_keybind_is_just_pressed(KeyBind::new("FreeMouse")){
             self.capture_cursor = self.capture_cursor.not();
         }
 

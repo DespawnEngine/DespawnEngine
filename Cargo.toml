@@ -14,3 +14,4 @@ vulkano = { version = "0.35.1", features = ["macros"] }
 vulkano-shaders = "0.35.0"
 winit = "0.30.11"
 bytemuck = "1.23.1"
+fixedstr = "0.5.9"
