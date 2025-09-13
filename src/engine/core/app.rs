@@ -3,6 +3,7 @@ use std::ops::Not;
 use std::sync::Arc;
 
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
+use vulkano::command_buffer::allocator::StandardCommandBufferAllocatorCreateInfo;
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocatorCreateInfo;
 use vulkano::descriptor_set::DescriptorSet;
@@ -37,9 +38,7 @@ use vulkano::{
     sync::{self, GpuFuture},
     Validated, VulkanError,
 };
-use winit::dpi::{LogicalPosition, PhysicalPosition};
 use winit::event::{DeviceEvent, DeviceId};
-use winit::event_loop::DeviceEvents;
 use winit::window::CursorGrabMode;
 use winit::{
     application::ApplicationHandler, event::WindowEvent, event_loop::ActiveEventLoop,
@@ -56,6 +55,8 @@ use crate::engine::rendering::{
     display::{create_main_window, create_render_pass, create_vertex_buffer},
 };
 use crate::engine::ui::egui_integration::EguiStruct;
+use crate::engine::ui::native_gui::NativeGui;
+use crate::engine::ui::square::SquareGuiElement;
 
 //
 // `App` holds the state of the application, including all Vulkan objects that need to persist between frames.
@@ -142,7 +143,11 @@ impl ApplicationHandler for App {
 
         let command_buffer_allocator = Arc::new(StandardCommandBufferAllocator::new(
             device.clone(),
-            Default::default(),
+            StandardCommandBufferAllocatorCreateInfo {
+                // primary_buffer_count: 1,
+                secondary_buffer_count: 1,
+                ..Default::default()
+            },
         ));
         self.command_buffer_allocator = Some(command_buffer_allocator);
 
@@ -376,6 +381,15 @@ impl ApplicationHandler for App {
             }
             WindowEvent::RedrawRequested => {
                 egui.redraw();
+                let gui = NativeGui::new(
+                    self.device.clone().unwrap(),
+                    Subpass::from(self.render_pass.clone().unwrap(), 1).unwrap(),
+                    self.command_buffer_allocator.clone().unwrap(),
+                    vec![
+                        Arc::new(SquareGuiElement::new([0.0, 0.3], [1.0, 0.5, 1.0], 0.8)),
+                        Arc::new(SquareGuiElement::new([-1.0, -1.0], [0.0, 1.0, 0.0], 1.4)),
+                    ],
+                );
 
                 // Calculate delta_time (example using std::time::Instant stored in self)
                 let now = std::time::Instant::now();
@@ -546,9 +560,16 @@ impl ApplicationHandler for App {
                             ..Default::default()
                         },
                     )
-                    .unwrap()
-                    .execute_commands(egui.draw_on_subpass_image(image_extent))
-                    .unwrap()
+                    .unwrap();
+                // .execute_commands(egui.draw_on_subpass_image(image_extent))
+                // .unwrap()
+                if gui.has_elements() {
+                    cmd_buffer_builder
+                        .execute_commands(gui.draw_elements(self.memory_allocator.clone().unwrap()))
+                        .unwrap();
+                };
+
+                cmd_buffer_builder
                     .end_render_pass(SubpassEndInfo::default())
                     .unwrap();
 

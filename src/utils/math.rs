@@ -14,6 +14,10 @@ use vulkano::buffer::BufferContents;
 
 #[derive(BufferContents, Copy, Clone, Debug, Default)]
 #[repr(C)]
+pub struct Vec2([f32; 2]);
+
+#[derive(BufferContents, Copy, Clone, Debug, Default)]
+#[repr(C)]
 pub struct Vec3([f32; 3]);
 
 #[derive(BufferContents, Copy, Clone, Debug, Default)]
@@ -27,6 +31,17 @@ pub struct Mat4([Vec4; 4]);
 #[derive(BufferContents, Copy, Clone, Debug)]
 #[repr(C)]
 pub struct Quat(Vec4);
+
+impl Vec2{
+    pub fn x(&self) -> f32{
+        self.0[0]
+    }
+
+    pub fn y(&self) -> f32{
+        self.0[1]
+    }
+
+}
 
 impl From<[f32; 4]> for Quat {
     fn from(value: [f32; 4]) -> Self {
@@ -122,6 +137,12 @@ impl From<Vec3> for Mat4 {
     }
 }
 
+impl From<[f32; 2]> for Vec2 {
+    fn from(value: [f32; 2]) -> Self {
+        Vec2(value)
+    }
+}
+
 impl From<[f32; 3]> for Vec3 {
     fn from(value: [f32; 3]) -> Self {
         Vec3(value)
@@ -167,6 +188,13 @@ impl From<[f32; 4]> for Vec4 {
     fn from(value: [f32; 4]) -> Self {
         Vec4(value)
     }
+}
+
+impl From<(Vec3, f32)> for Vec4{
+    fn from(value: (Vec3, f32)) -> Self {
+        [value.0.0[0], value.0.0[1],value.0.0[2], value.1].into()
+    }
+
 }
 
 impl From<Vec4> for glam_vec4 {

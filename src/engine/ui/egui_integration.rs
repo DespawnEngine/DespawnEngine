@@ -1,7 +1,5 @@
 use crate::engine::rendering::vswapchain::IMAGE_FORMAT;
 use crate::engine::ui::debug_ui::DebugUi;
-use egui_winit_vulkano::{Gui, GuiConfig};
-
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use egui_winit_vulkano::{
@@ -52,7 +50,7 @@ impl EguiStruct {
             system,
             queue,
             last_update: Instant::now(),
-            update_interval: Duration::from_secs_f64(0.5),
+            update_interval: Duration::from_secs_f64(6.5),
             debug_ui,
         }
     }
