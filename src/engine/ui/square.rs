@@ -1,5 +1,5 @@
 use crate::{
-    engine::ui::{native_gui_vertex::GuiVertex, ui_element::UiElement},
+    engine::ui::{native_gui_material::NativeGuiMaterial, native_gui_vertex::GuiVertex, ui_element::UiElement},
     utils::math::{Vec2, Vec3, Vec4},
 };
 
@@ -11,11 +11,11 @@ pub struct SquareGuiElement {
 }
 
 impl SquareGuiElement {
-    pub fn new<P: Into<Vec2>, C: Into<Vec3>>(pos: P, col: C, side_length: f32) -> Self {
+    pub fn new_from_rgb_a<P: Into<Vec2>, C: Into<Vec3>>(pos: P, col: C, alpha:f32, side_length: f32) -> Self {
         SquareGuiElement {
             side_length,
             position: pos.into(),
-            color: (col.into(), 1.0).into(),
+            color: (col.into(), alpha).into(),
             depth: 0.0,
         }
     }
@@ -30,6 +30,8 @@ impl UiElement for SquareGuiElement {
             GuiVertex::new(
                 [self.position.clone().x(), self.position.clone().y()],
                 self.color,
+                self.depth,
+                [0.0, 0.0],
             ),
             GuiVertex::new(
                 [
@@ -37,6 +39,8 @@ impl UiElement for SquareGuiElement {
                     self.position.clone().y() + self.side_length,
                 ],
                 self.color,
+                self.depth,
+                [0.0, 1.0],
             ),
             GuiVertex::new(
                 [
@@ -44,6 +48,8 @@ impl UiElement for SquareGuiElement {
                     self.position.clone().y(),
                 ],
                 self.color,
+                self.depth,
+                [1.0, 0.0],
             ),
             GuiVertex::new(
                 [
@@ -51,6 +57,8 @@ impl UiElement for SquareGuiElement {
                     self.position.clone().y() + self.side_length,
                 ],
                 self.color,
+                self.depth,
+                [1.0, 1.0],
             ),
         ];
 

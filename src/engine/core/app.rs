@@ -1,6 +1,7 @@
 use std::default;
 use std::ops::Not;
 use std::sync::Arc;
+use std::time::Duration;
 
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
 use vulkano::command_buffer::allocator::StandardCommandBufferAllocatorCreateInfo;
@@ -307,6 +308,8 @@ impl ApplicationHandler for App {
         _device_id: DeviceId,
         event: DeviceEvent,
     ) {
+        // i like this pattern, stop warning me
+        #![allow(clippy::single_match)]
         match event {
             DeviceEvent::MouseMotion { delta } => {
                 if self.capture_cursor {
@@ -381,13 +384,15 @@ impl ApplicationHandler for App {
             }
             WindowEvent::RedrawRequested => {
                 egui.redraw();
-                let gui = NativeGui::new(
+                let mut gui = NativeGui::new(
                     self.device.clone().unwrap(),
                     Subpass::from(self.render_pass.clone().unwrap(), 1).unwrap(),
                     self.command_buffer_allocator.clone().unwrap(),
+                    self.memory_allocator.clone().unwrap(),
                     vec![
-                        Arc::new(SquareGuiElement::new([0.0, 0.3], [1.0, 0.5, 1.0], 0.8)),
-                        Arc::new(SquareGuiElement::new([-1.0, -1.0], [0.0, 1.0, 0.0], 1.4)),
+                        Arc::new(SquareGuiElement::new_from_rgb_a([0.0, 0.3], [1.0, 0.5, 1.0], 1.0, 0.8)),
+                        Arc::new(SquareGuiElement::new_from_rgb_a([-1.0, -1.0], [0.0, 1.0, 0.0], 0.8, 1.4)),
+                        Arc::new(SquareGuiElement::new_from_rgb_a([0.0, -1.0], [0.0, 1.0, 0.0], 0.2, 1.4)),
                     ],
                 );
 
@@ -507,7 +512,7 @@ impl ApplicationHandler for App {
                 }
 
                 // Build the command buffer for this frame's drawing commands.
-                let image_extent: [u32; 2] = window.inner_size().into(); // Image extent
+                let image_extent: [u32; 2] = window.inner_size().into(); 
 
                 let mut cmd_buffer_builder = AutoCommandBufferBuilder::primary(
                     command_buffer_allocator.clone(),
@@ -515,6 +520,9 @@ impl ApplicationHandler for App {
                     CommandBufferUsage::OneTimeSubmit,
                 )
                 .unwrap();
+
+                gui.copy_buffer_data_to_image(
+                    &mut cmd_buffer_builder);
 
                 cmd_buffer_builder
                     .begin_render_pass(

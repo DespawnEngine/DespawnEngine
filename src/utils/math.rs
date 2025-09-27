@@ -11,6 +11,7 @@ use glam::Quat as glam_quat;
 use glam::Vec3 as glam_vec3;
 use glam::Vec4 as glam_vec4;
 use vulkano::buffer::BufferContents;
+use vulkano::pipeline::graphics::vertex_input::VertexMember;
 
 #[derive(BufferContents, Copy, Clone, Debug, Default)]
 #[repr(C)]

@@ -2,7 +2,7 @@
 // ======================
 // https://github.com/hakolao/egui_winit_vulkano/blob/master/src/renderer.rs
 // ======================
-// but like its awesome so idc + i am adapting it
+// its awesome
 //
 
 use std::sync::Arc;
@@ -15,7 +15,9 @@ use vulkano::{
     device::Device,
     pipeline::{
         graphics::{
-            color_blend::{AttachmentBlend, BlendFactor, BlendOp, ColorBlendAttachmentState, ColorBlendState},
+            color_blend::{
+                AttachmentBlend, BlendFactor, BlendOp, ColorBlendAttachmentState, ColorBlendState,
+            },
             input_assembly::InputAssemblyState,
             multisample::MultisampleState,
             rasterization::RasterizationState,
@@ -52,6 +54,7 @@ impl NativeGuiRenderer {
     }
 
     pub fn create_pipeline(device: Arc<Device>, subpass: Subpass) -> Arc<GraphicsPipeline> {
+        // just normal gfx pipeline stuff
         mod vs {
             vulkano_shaders::shader! {
                 ty: "vertex",
@@ -84,23 +87,34 @@ impl NativeGuiRenderer {
 
         let stages = [
             PipelineShaderStageCreateInfo::new(vs),
-            PipelineShaderStageCreateInfo::new(fs),
+            PipelineShaderStageCreateInfo::new(fs.clone()),
         ];
 
+        let pipeline_layout = PipelineDescriptorSetLayoutCreateInfo::from_stages(&stages);
+
+        // println!(
+        //     "\n==========\n{:?}, \n=========\n {:?}",
+        //     fs.info(),
+        //     pipeline_layout.set_layouts.first().unwrap()
+        // );
+        //
         let layout = PipelineLayout::new(
             device.clone(),
-            PipelineDescriptorSetLayoutCreateInfo::from_stages(&stages)
+            pipeline_layout
                 .into_pipeline_layout_create_info(device.clone())
                 .unwrap(),
         )
         .expect("failed to create ui graphics pipeline layout");
 
+        // should pass this in, its all hardcoded for now tho
         let viewport = Viewport {
             offset: [0.0, 0.0],
             extent: [1024.0, 1024.0],
             depth_range: 0.0..=1.0,
         };
 
+        // always gotta be so weird
+        //
         GraphicsPipeline::new(
             device.clone(),
             None,
@@ -120,18 +134,18 @@ impl NativeGuiRenderer {
                 multisample_state: Some(MultisampleState::default()),
                 color_blend_state: Some(ColorBlendState::with_attachment_states(
                     subpass.num_color_attachments(),
-                    ColorBlendAttachmentState{
-                        blend: Some(
-                            AttachmentBlend{
-                                src_alpha_blend_factor: BlendFactor::SrcAlpha,
-                                dst_alpha_blend_factor: BlendFactor::DstAlpha,
-                                alpha_blend_op: BlendOp::Add,
-                                src_color_blend_factor: BlendFactor::SrcAlpha,
-                                dst_color_blend_factor: BlendFactor::DstAlpha,
-                                color_blend_op: BlendOp::Max,
-                                // ..Default::default()
-                            }
-                        ),
+                    ColorBlendAttachmentState {
+                        blend: Some(AttachmentBlend {
+                            // i think half of this stuff is default, but cooler to be explicit
+                            src_alpha_blend_factor: BlendFactor::SrcAlpha,
+                            dst_alpha_blend_factor: BlendFactor::DstAlpha,
+                            alpha_blend_op: BlendOp::Add,
+                            // this fucks me up, theres enum variants for accessing the color but why
+                            // would you blend based on color? strange stuff
+                            src_color_blend_factor: BlendFactor::SrcAlpha,
+                            dst_color_blend_factor: BlendFactor::OneMinusSrcAlpha,
+                            color_blend_op: BlendOp::Add,
+                        }),
                         ..Default::default()
                     },
                 )),
@@ -142,6 +156,7 @@ impl NativeGuiRenderer {
         .expect("failed to create ui graphcis pipeline")
     }
 
+    // what a mouthful
     pub fn create_secondary_auto_cmd_buf_builder(
         &self,
     ) -> AutoCommandBufferBuilder<SecondaryAutoCommandBuffer> {
