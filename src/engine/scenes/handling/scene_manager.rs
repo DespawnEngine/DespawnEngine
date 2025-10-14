@@ -31,9 +31,20 @@ impl SceneManager
         INSTANCE.get_or_init(SceneManager::new).clone()
     }
 
-    pub fn switch_scene(&self, scene_type: SceneType)
-    {
-        *self.current_scene.lock().unwrap() = Some(scene_type); //
+    pub fn switch_scene(&self, scene_type: SceneType) {
+        let mut current_scene = self.current_scene.lock().unwrap();
+        *current_scene = Some(scene_type);
+    }
+
+    pub fn start(&self) {
+        let scene_type = *self.current_scene.lock().unwrap();
+        let mut scenes = self.scenes.lock().unwrap();
+
+        if let Some(scene_type) = scene_type {
+            if let Some((_, scene)) = scenes.iter_mut().find(|(st, _)| *st == scene_type) {
+                scene.start(self);
+            }
+        }
     }
 
     pub fn update(&self)
