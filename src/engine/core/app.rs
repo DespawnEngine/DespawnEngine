@@ -296,15 +296,20 @@ impl ApplicationHandler for App {
         self.input_state = Some(InputState::default());
     }
 
-    fn device_event(
+    fn device_event
+    (
         &mut self,
         _event_loop: &ActiveEventLoop,
         _device_id: DeviceId,
         event: DeviceEvent,
-    ) {
-        match event {
-            DeviceEvent::MouseMotion { delta } => {
-                if self.capture_cursor {
+    )
+    {
+        match event
+        {
+            DeviceEvent::MouseMotion { delta } =>
+            {
+                if self.capture_cursor
+                {
                     self.input_state
                         .as_mut()
                         .expect("failed to get input state")
@@ -315,12 +320,14 @@ impl ApplicationHandler for App {
         }
     }
 
-    fn window_event(
+    fn window_event
+    (
         &mut self,
         event_loop: &ActiveEventLoop,
         _window_id: winit::window::WindowId,
         event: WindowEvent,
-    ) {
+    )
+    {
         let egui = self.egui.as_mut().unwrap();
         egui.update(&event);
 
@@ -342,7 +349,8 @@ impl ApplicationHandler for App {
             self.capture_cursor = self.capture_cursor.not();
         }
 
-        if self.capture_cursor {
+        if self.capture_cursor
+        {
             self.window
                 .as_mut()
                 .expect("failed to get window")
@@ -352,7 +360,8 @@ impl ApplicationHandler for App {
                 .as_mut()
                 .expect("failed to get window")
                 .set_cursor_visible(false);
-        } else {
+        } else
+        {
             self.window
                 .as_mut()
                 .expect("failed to get window")
@@ -366,15 +375,18 @@ impl ApplicationHandler for App {
         }
 
         match event {
-            WindowEvent::CloseRequested => {
+            WindowEvent::CloseRequested =>
+                {
                 event_loop.exit();
             }
             // On resize, simply flag that the swapchain needs to be recreated.
             // The actual recreation happens at the beginning of the next `RedrawRequested` event.
-            WindowEvent::Resized(_) => {
+            WindowEvent::Resized(_) =>
+            {
                 self.recreate_swapchain = true;
             }
-            WindowEvent::RedrawRequested => {
+            WindowEvent::RedrawRequested =>
+                {
                 egui.redraw();
 
                 // Calculate delta_time (example using std::time::Instant stored in self)
