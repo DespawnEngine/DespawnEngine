@@ -15,11 +15,14 @@ impl SceneManager
 {
     pub fn new() -> Self
     {
-        let scenes = vec![
+        let scenes = vec!
+        [
             (SceneType::Menu, Box::new(MenuScene) as Box<dyn Scene + Send>),
             (SceneType::Game, Box::new(GameScene) as Box<dyn Scene + Send>),
         ];
-        SceneManager {
+
+        SceneManager
+        {
             scenes: Arc::new(Mutex::new(scenes)),
             current_scene: Arc::new(Mutex::new(Some(SceneType::Menu))),
         }
@@ -31,42 +34,78 @@ impl SceneManager
         INSTANCE.get_or_init(SceneManager::new).clone()
     }
 
-    pub fn switch_scene(&self, scene_type: SceneType) {
+    pub fn switch_scene(&self, scene_type: SceneType)
+    {
         let mut current_scene = self.current_scene.lock().unwrap();
         *current_scene = Some(scene_type);
+
+        // When switching, run awake() and start() for the new scene
+        let mut scenes = self.scenes.lock().unwrap();
+        if let Some((_, scene)) = scenes.iter_mut().find(|(st, _)| *st == scene_type)
+        {
+            scene.awake(self);
+            scene.start(self);
+        }
     }
 
-    pub fn start(&self) {
+    fn with_current_scene_mut<F>(&self, mut f: F)
+    where
+        F: FnMut(&mut dyn Scene),
+    {
         let scene_type = *self.current_scene.lock().unwrap();
-        let mut scenes = self.scenes.lock().unwrap();
-
-        if let Some(scene_type) = scene_type {
-            if let Some((_, scene)) = scenes.iter_mut().find(|(st, _)| *st == scene_type) {
-                scene.start(self);
+        if let Some(scene_type) = scene_type
+        {
+            let mut scenes = self.scenes.lock().unwrap();
+            if let Some((_, scene)) = scenes.iter_mut().find(|(st, _)| *st == scene_type)
+            {
+                f(scene.as_mut());
             }
         }
+    }
+
+    fn with_current_scene<F>(&self, mut f: F)
+    where
+        F: FnMut(&dyn Scene),
+    {
+        let scene_type = *self.current_scene.lock().unwrap();
+        if let Some(scene_type) = scene_type
+        {
+            let scenes = self.scenes.lock().unwrap();
+            if let Some((_, scene)) = scenes.iter().find(|(st, _)| *st == scene_type)
+            {
+                f(scene.as_ref());
+            }
+        }
+    }
+
+    // Lifecycle Methods
+    pub fn awake(&self)
+    {
+        self.with_current_scene_mut(|scene| scene.awake(self));
+    }
+
+    pub fn start(&self)
+    {
+        self.with_current_scene_mut(|scene| scene.start(self));
     }
 
     pub fn update(&self)
     {
-        let scene_type = *self.current_scene.lock().unwrap();
-        if let Some(scene_type) = scene_type {
-            let mut scenes = self.scenes.lock().unwrap();
-            if let Some((_, scene)) = scenes.iter_mut().find(|(st, _)| *st == scene_type)
-            {
-                scene.update(self); // Pass self directly
-            }
-        }
+        self.with_current_scene_mut(|scene| scene.update(self));
+    }
+
+    pub fn fixed_update(&self)
+    {
+        self.with_current_scene_mut(|scene| scene.fixed_update(self));
+    }
+
+    pub fn late_update(&self)
+    {
+        self.with_current_scene_mut(|scene| scene.late_update(self));
     }
 
     pub fn draw(&self)
     {
-        let scene_type = *self.current_scene.lock().unwrap();
-        if let Some(scene_type) = scene_type {
-            let scenes = self.scenes.lock().unwrap();
-            if let Some((_, scene)) = scenes.iter().find(|(st, _)| *st == scene_type) {
-                scene.draw();
-            }
-        }
+        self.with_current_scene(|scene| scene.draw());
     }
 }
