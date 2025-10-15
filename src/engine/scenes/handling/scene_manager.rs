@@ -43,8 +43,8 @@ impl SceneManager
         let mut scenes = self.scenes.lock().unwrap();
         if let Some((_, scene)) = scenes.iter_mut().find(|(st, _)| *st == scene_type)
         {
-            scene.awake(self);
-            scene.start(self);
+            scene.awake();
+            scene.start();
         }
     }
 
@@ -81,27 +81,27 @@ impl SceneManager
     // Lifecycle Methods
     pub fn awake(&self)
     {
-        self.with_current_scene_mut(|scene| scene.awake(self));
+        self.with_current_scene_mut(|scene| scene.awake());
     }
 
     pub fn start(&self)
     {
-        self.with_current_scene_mut(|scene| scene.start(self));
+        self.with_current_scene_mut(|scene| scene.start());
     }
 
     pub fn update(&self)
     {
-        self.with_current_scene_mut(|scene| scene.update(self));
+        self.with_current_scene_mut(|scene| scene.update());
     }
 
     pub fn fixed_update(&self)
     {
-        self.with_current_scene_mut(|scene| scene.fixed_update(self));
+        self.with_current_scene_mut(|scene| scene.fixed_update());
     }
 
     pub fn late_update(&self)
     {
-        self.with_current_scene_mut(|scene| scene.late_update(self));
+        self.with_current_scene_mut(|scene| scene.late_update());
     }
 
     pub fn draw(&self)

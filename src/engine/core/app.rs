@@ -55,6 +55,7 @@ use crate::engine::rendering::{
     camera::Camera,
     display::{create_main_window, create_render_pass, create_vertex_buffer},
 };
+use crate::engine::scenes::handling::scene_manager::SceneManager;
 use crate::engine::ui::egui_integration::EguiStruct;
 
 //
@@ -83,6 +84,7 @@ pub struct App {
     input_state: Option<InputState>,
     last_frame_time: Option<std::time::Instant>,
     capture_cursor: bool,
+    scene_manager: Option<SceneManager>, // MAIN GAME SCENE MANAGER
 }
 
 impl Default for App {
@@ -115,6 +117,7 @@ impl Default for App {
             input_state: None,
             last_frame_time: None,
             capture_cursor: true,
+            scene_manager: None, // MAIN GAME SCENE MANAGER
         }
     }
 }
@@ -294,6 +297,12 @@ impl ApplicationHandler for App {
         self.recreate_swapchain = false;
         self.previous_frame_end = Some(sync::now(device.clone()).boxed());
         self.input_state = Some(InputState::default());
+
+        // Create SceneManager and call Awake/Start
+        let scene_manager = SceneManager::instance();
+        scene_manager.awake();
+        scene_manager.start();
+        self.scene_manager = Some(scene_manager);
     }
 
     fn device_event
@@ -386,7 +395,14 @@ impl ApplicationHandler for App {
                 self.recreate_swapchain = true;
             }
             WindowEvent::RedrawRequested =>
-                {
+            {
+                /// Scene update order
+                if let Some(scene_manager) = &self.scene_manager {
+                    scene_manager.fixed_update();
+                    scene_manager.update();
+                    scene_manager.late_update();
+                }
+
                 egui.redraw();
 
                 // Calculate delta_time (example using std::time::Instant stored in self)
@@ -507,6 +523,12 @@ impl ApplicationHandler for App {
                 // Build the command buffer for this frame's drawing commands.
                 let image_extent: [u32; 2] = window.inner_size().into(); // Image extent
 
+                // Do scene manager lifecycle draw
+                if let Some(scene_manager) = &self.scene_manager {
+                    scene_manager.draw();
+                }
+
+                // START BUILDING BUFFERS
                 let mut cmd_buffer_builder = AutoCommandBufferBuilder::primary(
                     command_buffer_allocator.clone(),
                     queue.queue_family_index(),

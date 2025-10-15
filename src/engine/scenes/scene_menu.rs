@@ -5,17 +5,15 @@ use crate::engine::scenes::handling::scene_types::SceneType;
 pub struct MenuScene;
 impl Scene for MenuScene
 {
-    fn start(&mut self, manager: &SceneManager){}
+    fn start(&mut self){}
     
-    fn update(&mut self, manager: &SceneManager) {
+    fn update(&mut self) {
         // Auto switch to game scene. Later add a real main menu
-        if true {
-            manager.switch_scene(SceneType::Game);
-        }
+        
     }
 
     fn draw(&self) {
-        println!("Drawing Menu Scene");
+        //println!("Drawing Menu Scene");
     }
 }
 
