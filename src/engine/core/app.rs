@@ -170,7 +170,7 @@ impl App
         self.previous_frame_end = Some(sync::now(device.clone()).boxed());
         self.input_state = Some(InputState::default());
 
-        // Create SceneManager and call Awake/Start
+        // Create the SceneManager and call Awake/Start
         let scene_manager = SceneManager::instance();
         scene_manager.awake();
         scene_manager.start();
@@ -333,7 +333,7 @@ impl ApplicationHandler for App {
 
                 egui.redraw();
 
-                // Calculate delta_time (example using std::time::Instant stored in self)
+                // Calculate delta_time (example, using std::time::Instant stored in self)
                 let now = std::time::Instant::now();
                 let delta_time = if let Some(last_frame_time) = self.last_frame_time {
                     let dt = now.duration_since(last_frame_time).as_secs_f32();
@@ -343,14 +343,14 @@ impl ApplicationHandler for App {
                 };
                 self.last_frame_time = Some(now);
 
-                // Update the camera with current input state and delta time
+                // Update the camera with the current input state and delta time
                 if let (Some(camera), Some(input_state)) =
                     (self.camera.as_mut(), self.input_state.as_mut())
                 {
                     camera.update(delta_time, input_state);
                 }
 
-                // Now create the MVP buffer from updated camera
+                // Now create the MVP buffer from the updated camera
                 let mvp_buffer = Buffer::from_data(
                     self.memory_allocator.as_ref().unwrap().clone(),
                     BufferCreateInfo {
@@ -493,7 +493,7 @@ impl ApplicationHandler for App {
                     )
                     .unwrap();
 
-                // Wrap draw call in an unsafe block so it works :|
+                // Wrap the draw call in an unsafe block so it works :|
                 unsafe {
                     cmd_buffer_builder
                         .draw(self.vertex_buffer.as_ref().unwrap().len() as u32, 1, 0, 0)
