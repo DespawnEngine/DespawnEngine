@@ -122,31 +122,27 @@ impl Default for App {
     }
 }
 
-impl ApplicationHandler for App {
-    // This is called once when the application starts.
-    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        // Create the window
+// This is called once when the application starts.
+impl App
+{
+    fn create_window(&mut self, event_loop: &ActiveEventLoop) {
         let window = create_main_window(event_loop);
         self.window = Some(window.clone());
-
-        // Initialize Vulkan
+    }
+    fn create_vulkan(&mut self, event_loop: &ActiveEventLoop) {
         let instance = create_instance(event_loop);
-        let surface = swapchain::Surface::from_window(instance.clone(), window.clone()).unwrap();
+        let surface = swapchain::Surface::from_window(instance.clone(), self.window.as_ref().unwrap().clone()).unwrap();
         self.surface = Some(surface.clone());
 
         let (device, queue) = create_device_and_queue(instance, surface.clone());
         self.device = Some(device.clone());
         self.queue = Some(queue.clone());
 
-        let (swapchain, images) =
-            create_swapchain(device.clone(), surface.clone(), window.inner_size().into());
+        let (swapchain, images) = create_swapchain(device.clone(), surface.clone(), self.window.as_ref().unwrap().inner_size().into());
         self.swapchain = Some(swapchain.clone());
         self.images = Some(images.clone());
 
-        let command_buffer_allocator = Arc::new(StandardCommandBufferAllocator::new(
-            device.clone(),
-            Default::default(),
-        ));
+        let command_buffer_allocator = Arc::new(StandardCommandBufferAllocator::new(device.clone(), Default::default()));
         self.command_buffer_allocator = Some(command_buffer_allocator);
 
         // Define the render pass from display.rs
@@ -157,143 +153,19 @@ impl ApplicationHandler for App {
         let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
         self.memory_allocator = Some(memory_allocator.clone());
 
-        let vertex_buffer = create_vertex_buffer(self.memory_allocator.as_ref().unwrap().clone());
+        let vertex_buffer = create_vertex_buffer(memory_allocator.clone());
         self.vertex_buffer = Some(vertex_buffer);
 
         self.camera = Some(Camera::from_pos(2.5, -2.5, 2.5));
 
-        let mvp_buffer = Buffer::from_data(
-            self.memory_allocator.as_ref().unwrap().clone(),
-            BufferCreateInfo {
-                usage: BufferUsage::UNIFORM_BUFFER,
-                ..Default::default()
-            },
-            AllocationCreateInfo {
-                memory_type_filter: MemoryTypeFilter::PREFER_HOST
-                    | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-                ..Default::default()
-            },
-            MVP::default(),
-        )
-        .unwrap();
+        let mvp_buffer = Buffer::from_data(memory_allocator.clone(), BufferCreateInfo { usage: BufferUsage::UNIFORM_BUFFER, ..Default::default() }, AllocationCreateInfo { memory_type_filter: MemoryTypeFilter::PREFER_HOST | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE, ..Default::default() }, MVP::default()).unwrap();
+        self.mvp_buffer = Some(mvp_buffer); // Temp store if needed later
 
-        let framebuffers = window_size_dependent_setup(
-            &images,
-            render_pass.clone(),
-            &mut self.viewport,
-            self.memory_allocator.as_ref().unwrap(), // Arc, not &Arc
-        );
-        // End of creating vertices for the triangle.
-
-        self.egui = Some(EguiStruct::new(
-            event_loop,
-            surface,
-            queue,
-            Subpass::from(render_pass.clone(), 1).unwrap(),
-        ));
-
-        let depth_stencil_state = DepthStencilState {
-            depth: Some(vulkano::pipeline::graphics::depth_stencil::DepthState {
-                write_enable: true,
-                compare_op: vulkano::pipeline::graphics::depth_stencil::CompareOp::Less,
-                //..Default::default()
-            }),
-            ..Default::default()
-        };
-        // Loading the vertex and fragment shaders
-        mod vs {
-            vulkano_shaders::shader! {
-                ty: "vertex",
-                path: "assets/shaders/first_triangle/vertex.glsl"
-            }
-        }
-        mod fs {
-            vulkano_shaders::shader! {
-                ty: "fragment",
-                path: "assets/shaders/first_triangle/fragment.glsl"
-            }
-        }
-
-        let vs = vs::load(device.clone()).expect("failed to create shader module");
-        let fs = fs::load(device.clone()).expect("failed to create shader module");
-
-        let viewport = Viewport {
-            offset: [0.0, 0.0],
-            extent: [1024.0, 1024.0],
-            depth_range: 0.0..=1.0,
-        };
-
-        // Creating the graphics pipeline
-        let pipeline = {
-            let vs = vs.entry_point("main").unwrap();
-            let fs = fs.entry_point("main").unwrap();
-
-            let vertex_input_state = MyVertex::per_vertex().definition(&vs).unwrap();
-
-            let stages = [
-                PipelineShaderStageCreateInfo::new(vs),
-                PipelineShaderStageCreateInfo::new(fs),
-            ];
-
-            let layout = PipelineLayout::new(
-                device.clone(),
-                PipelineDescriptorSetLayoutCreateInfo::from_stages(&stages)
-                    .into_pipeline_layout_create_info(device.clone())
-                    .unwrap(),
-            )
-            .unwrap();
-
-            let subpass = Subpass::from(render_pass.clone(), 0).unwrap();
-
-            GraphicsPipeline::new(
-                device.clone(),
-                None,
-                GraphicsPipelineCreateInfo {
-                    stages: stages.into_iter().collect(),
-                    vertex_input_state: Some(vertex_input_state),
-                    depth_stencil_state: Some(depth_stencil_state),
-                    input_assembly_state: Some(InputAssemblyState::default()),
-                    viewport_state: Some(ViewportState {
-                        viewports: [viewport].into_iter().collect(),
-                        ..Default::default()
-                    }),
-                    rasterization_state: Some(RasterizationState::default()),
-                    multisample_state: Some(MultisampleState::default()),
-                    color_blend_state: Some(ColorBlendState::with_attachment_states(
-                        subpass.num_color_attachments(),
-                        ColorBlendAttachmentState::default(),
-                    )),
-                    subpass: Some(subpass.into()),
-                    ..GraphicsPipelineCreateInfo::layout(layout)
-                },
-            )
-            .unwrap()
-        };
-        self.pipeline = Some(pipeline.clone()); // store
-
-        let descriptor_set_allocator = Arc::new(StandardDescriptorSetAllocator::new(
-            device.clone(),
-            StandardDescriptorSetAllocatorCreateInfo::default(),
-        ));
-        let layout = pipeline.layout().set_layouts()[0].clone();
-        let set = DescriptorSet::new(
-            descriptor_set_allocator.clone(),
-            layout.clone(),
-            [WriteDescriptorSet::buffer(0, mvp_buffer.clone())],
-            [],
-        )
-        .unwrap();
-
-        self.descriptor_set_allocator = Some(descriptor_set_allocator);
-        self.descriptor_set = Some(set);
-
-        let framebuffers = window_size_dependent_setup(
-            &images,
-            render_pass.clone(),
-            &mut self.viewport,
-            &memory_allocator,
-        );
+        let framebuffers = window_size_dependent_setup(&images, render_pass.clone(), &mut self.viewport, &memory_allocator);
         self.framebuffers = Some(framebuffers);
+
+        self.egui = Some(EguiStruct::new(event_loop, surface, queue, Subpass::from(render_pass.clone(), 1).unwrap()));
+
         self.recreate_swapchain = false;
         self.previous_frame_end = Some(sync::now(device.clone()).boxed());
         self.input_state = Some(InputState::default());
@@ -303,6 +175,62 @@ impl ApplicationHandler for App {
         scene_manager.awake();
         scene_manager.start();
         self.scene_manager = Some(scene_manager);
+    }
+    fn create_pipeline(&mut self) {
+        let depth_stencil_state = DepthStencilState { depth: Some(vulkano::pipeline::graphics::depth_stencil::DepthState { write_enable: true, compare_op: vulkano::pipeline::graphics::depth_stencil::CompareOp::Less }), ..Default::default() };
+
+        // Loading the vertex and fragment shaders
+        mod vs { vulkano_shaders::shader! { ty: "vertex", path: "assets/shaders/first_triangle/vertex.glsl" } }
+        mod fs { vulkano_shaders::shader! { ty: "fragment", path: "assets/shaders/first_triangle/fragment.glsl" } }
+
+        let vs = vs::load(self.device.as_ref().unwrap().clone()).expect("failed to create shader module");
+        let fs = fs::load(self.device.as_ref().unwrap().clone()).expect("failed to create shader module");
+
+        let viewport = Viewport { offset: [0.0, 0.0], extent: [1024.0, 1024.0], depth_range: 0.0..=1.0 };
+
+        // Creating the graphics pipeline
+        let pipeline = {
+            let vs_entry = vs.entry_point("main").unwrap();
+            let fs_entry = fs.entry_point("main").unwrap();
+
+            let vertex_input_state = MyVertex::per_vertex().definition(&vs_entry).unwrap();
+
+            let stages = [PipelineShaderStageCreateInfo::new(vs_entry), PipelineShaderStageCreateInfo::new(fs_entry)];
+
+            let layout = PipelineLayout::new(self.device.as_ref().unwrap().clone(), PipelineDescriptorSetLayoutCreateInfo::from_stages(&stages).into_pipeline_layout_create_info(self.device.as_ref().unwrap().clone()).unwrap()).unwrap();
+
+            let subpass = Subpass::from(self.render_pass.as_ref().unwrap().clone(), 0).unwrap();
+
+            GraphicsPipeline::new(self.device.as_ref().unwrap().clone(), None, GraphicsPipelineCreateInfo {
+                stages: stages.into_iter().collect(),
+                vertex_input_state: Some(vertex_input_state),
+                depth_stencil_state: Some(depth_stencil_state),
+                input_assembly_state: Some(InputAssemblyState::default()),
+                viewport_state: Some(ViewportState { viewports: [viewport].into_iter().collect(), ..Default::default() }),
+                rasterization_state: Some(RasterizationState::default()),
+                multisample_state: Some(MultisampleState::default()),
+                color_blend_state: Some(ColorBlendState::with_attachment_states(subpass.num_color_attachments(), ColorBlendAttachmentState::default())),
+                subpass: Some(subpass.into()),
+                ..GraphicsPipelineCreateInfo::layout(layout)
+            }).unwrap()
+        };
+        self.pipeline = Some(pipeline.clone()); // store
+
+        let descriptor_set_allocator = Arc::new(StandardDescriptorSetAllocator::new(self.device.as_ref().unwrap().clone(), StandardDescriptorSetAllocatorCreateInfo::default()));
+        let layout = pipeline.layout().set_layouts()[0].clone();
+        let set = DescriptorSet::new(descriptor_set_allocator.clone(), layout.clone(), [WriteDescriptorSet::buffer(0, self.mvp_buffer.as_ref().unwrap().clone())], []).unwrap();
+
+        self.descriptor_set_allocator = Some(descriptor_set_allocator);
+        self.descriptor_set = Some(set);
+    }
+}
+
+impl ApplicationHandler for App {
+    // This is called once when the application starts.
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        self.create_window(event_loop);
+        self.create_vulkan(event_loop);
+        self.create_pipeline();
     }
 
     fn device_event
@@ -396,7 +324,7 @@ impl ApplicationHandler for App {
             }
             WindowEvent::RedrawRequested =>
             {
-                /// Scene update order
+                // Scene update order
                 if let Some(scene_manager) = &self.scene_manager {
                     scene_manager.fixed_update();
                     scene_manager.update();
