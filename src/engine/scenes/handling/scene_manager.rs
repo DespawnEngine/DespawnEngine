@@ -9,22 +9,21 @@ pub struct SceneManager
 {
     scenes: Arc<Mutex<Vec<(SceneType, Box<dyn Scene + Send>)>>>,
     current_scene: Arc<Mutex<Option<SceneType>>>,
+    next_scene: Arc<Mutex<Option<SceneType>>>,
 }
 
 impl SceneManager
 {
-    pub fn new() -> Self
-    {
-        let scenes = vec!
-        [
+    pub fn new() -> Self {
+        let scenes = vec![
             (SceneType::Menu, Box::new(MenuScene) as Box<dyn Scene + Send>),
             (SceneType::Game, Box::new(GameScene) as Box<dyn Scene + Send>),
         ];
 
-        SceneManager
-        {
+        SceneManager {
             scenes: Arc::new(Mutex::new(scenes)),
             current_scene: Arc::new(Mutex::new(Some(SceneType::Menu))),
+            next_scene: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -46,6 +45,10 @@ impl SceneManager
             scene.awake();
             scene.start();
         }
+    }
+    pub fn queue_scene_switch(&self, scene_type: SceneType) {
+        let mut next_scene = self.next_scene.lock().unwrap();
+        *next_scene = Some(scene_type);
     }
 
     fn with_current_scene_mut<F>(&self, mut f: F)
@@ -91,7 +94,15 @@ impl SceneManager
 
     pub fn update(&self)
     {
+        // Update the current scene
         self.with_current_scene_mut(|scene| scene.update());
+
+        // After updating, check if a new scene was queued
+        let mut next_scene = self.next_scene.lock().unwrap();
+        if let Some(scene_type) = next_scene.take() {
+            drop(next_scene); // unlock before switching
+            self.switch_scene(scene_type);
+        }
     }
 
     pub fn fixed_update(&self)

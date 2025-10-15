@@ -5,9 +5,14 @@ pub struct GameScene;
 
 impl Scene for GameScene {
 
+    fn start(&mut self)
+    {
+        println!("Started Game Scene");
+    }
+
     fn draw(&self)
     {
-        println!("Drawing Game Scene");
+        //println!("Drawing Game Scene");
     }
 }
 
