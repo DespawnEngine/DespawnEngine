@@ -3,6 +3,12 @@ use crate::engine::scenes::handling::scene_trait::Scene;
 use crate::engine::scenes::handling::scene_types::SceneType;
 use crate::engine::scenes::scene_game::GameScene;
 use crate::engine::scenes::scene_menu::MenuScene;
+use crate::engine::core::input::InputState;
+use crate::engine::rendering::camera::Camera;
+use vulkano::memory::allocator::StandardMemoryAllocator;
+use vulkano::descriptor_set::DescriptorSet;
+use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
+use vulkano::descriptor_set::layout::DescriptorSetLayout;
 
 #[derive(Clone)]
 pub struct SceneManager
@@ -81,6 +87,21 @@ impl SceneManager
         }
     }
 
+    fn with_current_scene_mut_with_params<F>(&self, delta_time: f32, input_state: &mut InputState, camera: &mut Camera, mut f: F)
+    where
+        F: FnMut(&mut dyn Scene, f32, &mut InputState, &mut Camera),
+    {
+        let scene_type = *self.current_scene.lock().unwrap();
+        if let Some(scene_type) = scene_type
+        {
+            let mut scenes = self.scenes.lock().unwrap();
+            if let Some((_, scene)) = scenes.iter_mut().find(|(st, _)| *st == scene_type)
+            {
+                f(scene.as_mut(), delta_time, input_state, camera);
+            }
+        }
+    }
+
     // Lifecycle Methods
     pub fn awake(&self)
     {
@@ -92,10 +113,10 @@ impl SceneManager
         self.with_current_scene_mut(|scene| scene.start());
     }
 
-    pub fn update(&self)
+    pub fn update(&self, delta_time: f32, input_state: &mut InputState, camera: &mut Camera)
     {
         // Update the current scene
-        self.with_current_scene_mut(|scene| scene.update());
+        self.with_current_scene_mut_with_params(delta_time, input_state, camera, |scene, dt, input, cam| scene.update(dt, input, cam));
 
         // After updating, check if a new scene was queued
         let mut next_scene = self.next_scene.lock().unwrap();
@@ -105,18 +126,36 @@ impl SceneManager
         }
     }
 
-    pub fn fixed_update(&self)
+    pub fn fixed_update(&self, delta_time: f32, input_state: &mut InputState, camera: &mut Camera)
     {
-        self.with_current_scene_mut(|scene| scene.fixed_update());
+        self.with_current_scene_mut_with_params(delta_time, input_state, camera, |scene, dt, input, cam| scene.fixed_update(dt, input, cam));
     }
 
-    pub fn late_update(&self)
+    pub fn late_update(&self, delta_time: f32, input_state: &mut InputState, camera: &mut Camera)
     {
-        self.with_current_scene_mut(|scene| scene.late_update());
+        self.with_current_scene_mut_with_params(delta_time, input_state, camera, |scene, dt, input, cam| scene.late_update(dt, input, cam));
     }
 
     pub fn draw(&self)
     {
         self.with_current_scene(|scene| scene.draw());
+    }
+
+    pub fn create_mvp_descriptor_set(&self, 
+        memory_allocator: &Arc<StandardMemoryAllocator>,
+        descriptor_set_allocator: &Arc<StandardDescriptorSetAllocator>,
+        layout: &Arc<DescriptorSetLayout>,
+        camera: &Camera
+    ) -> Option<Arc<DescriptorSet>> {
+        let scene_type = *self.current_scene.lock().unwrap();
+        if let Some(scene_type) = scene_type
+        {
+            let scenes = self.scenes.lock().unwrap();
+            if let Some((_, scene)) = scenes.iter().find(|(st, _)| *st == scene_type)
+            {
+                return scene.create_mvp_descriptor_set(memory_allocator, descriptor_set_allocator, layout, camera);
+            }
+        }
+        None
     }
 }

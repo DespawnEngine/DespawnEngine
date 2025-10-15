@@ -1,4 +1,3 @@
-use std::default;
 use std::ops::Not;
 use std::sync::Arc;
 
@@ -7,7 +6,6 @@ use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocatorCreateInfo;
 use vulkano::descriptor_set::DescriptorSet;
 use vulkano::descriptor_set::WriteDescriptorSet;
-use vulkano::device::Device;
 use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter};
 use vulkano::pipeline::graphics::depth_stencil::DepthStencilState;
 use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
@@ -37,9 +35,7 @@ use vulkano::{
     sync::{self, GpuFuture},
     Validated, VulkanError,
 };
-use winit::dpi::{LogicalPosition, PhysicalPosition};
 use winit::event::{DeviceEvent, DeviceId};
-use winit::event_loop::DeviceEvents;
 use winit::window::CursorGrabMode;
 use winit::{
     application::ApplicationHandler, event::WindowEvent, event_loop::ActiveEventLoop,
@@ -324,15 +320,6 @@ impl ApplicationHandler for App {
             }
             WindowEvent::RedrawRequested =>
             {
-                // Scene update order
-                if let Some(scene_manager) = &self.scene_manager {
-                    scene_manager.fixed_update();
-                    scene_manager.update();
-                    scene_manager.late_update();
-                }
-
-                egui.redraw();
-
                 // Calculate delta_time (example, using std::time::Instant stored in self)
                 let now = std::time::Instant::now();
                 let delta_time = if let Some(last_frame_time) = self.last_frame_time {
@@ -343,52 +330,75 @@ impl ApplicationHandler for App {
                 };
                 self.last_frame_time = Some(now);
 
-                // Update the camera with the current input state and delta time
-                if let (Some(camera), Some(input_state)) =
-                    (self.camera.as_mut(), self.input_state.as_mut())
-                {
-                    camera.update(delta_time, input_state);
+                // Scene update order
+                if let Some(scene_manager) = &self.scene_manager {
+                    if let (Some(input_state), Some(camera)) = (self.input_state.as_mut(), self.camera.as_mut()) {
+                        scene_manager.fixed_update(delta_time, input_state, camera);
+                        scene_manager.update(delta_time, input_state, camera);
+                        scene_manager.late_update(delta_time, input_state, camera);
+                    }
                 }
 
-                // Now create the MVP buffer from the updated camera
-                let mvp_buffer = Buffer::from_data(
-                    self.memory_allocator.as_ref().unwrap().clone(),
-                    BufferCreateInfo {
-                        usage: BufferUsage::UNIFORM_BUFFER,
-                        ..Default::default()
-                    },
-                    AllocationCreateInfo {
-                        memory_type_filter: MemoryTypeFilter::PREFER_HOST
-                            | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-                        ..Default::default()
-                    },
-                    MVP::default().apply_camera_transforms(self.camera.unwrap()),
-                )
-                .unwrap();
+                egui.redraw();
 
-                let layout = self.pipeline.clone().unwrap().layout().set_layouts()[0].clone(); // use
+                // Camera update is now handled in the scene
 
-                let mvp_buffer = Buffer::from_data(
-                    self.memory_allocator.as_ref().unwrap().clone(),
-                    BufferCreateInfo {
-                        usage: BufferUsage::UNIFORM_BUFFER,
-                        ..Default::default()
-                    },
-                    AllocationCreateInfo {
-                        memory_type_filter: MemoryTypeFilter::PREFER_HOST
-                            | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-                        ..Default::default()
-                    },
-                    MVP::default().apply_camera_transforms(self.camera.unwrap()),
-                )
-                .unwrap();
-                let set = DescriptorSet::new(
-                    self.descriptor_set_allocator.clone().unwrap().clone(),
-                    layout.clone(),
-                    [WriteDescriptorSet::buffer(0, mvp_buffer.clone())],
-                    [],
-                )
-                .unwrap();
+                // Create MVP descriptor set through the scene manager
+                let layout = self.pipeline.clone().unwrap().layout().set_layouts()[0].clone();
+                let set = if let Some(scene_manager) = &self.scene_manager {
+                    scene_manager.create_mvp_descriptor_set(
+                        self.memory_allocator.as_ref().unwrap(),
+                        self.descriptor_set_allocator.as_ref().unwrap(),
+                        &layout,
+                        self.camera.as_ref().unwrap()
+                    ).unwrap_or_else(|| {
+                        // Fallback to default MVP buffer if scene doesn't provide one
+                        let mvp_buffer = Buffer::from_data(
+                            self.memory_allocator.as_ref().unwrap().clone(),
+                            BufferCreateInfo {
+                                usage: BufferUsage::UNIFORM_BUFFER,
+                                ..Default::default()
+                            },
+                            AllocationCreateInfo {
+                                memory_type_filter: MemoryTypeFilter::PREFER_HOST
+                                    | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                                ..Default::default()
+                            },
+                            MVP::default().apply_camera_transforms(self.camera.unwrap()),
+                        )
+                        .unwrap();
+                        DescriptorSet::new(
+                            self.descriptor_set_allocator.clone().unwrap().clone(),
+                            layout.clone(),
+                            [WriteDescriptorSet::buffer(0, mvp_buffer)],
+                            [],
+                        )
+                        .unwrap()
+                    })
+                } else {
+                    // Fallback if no scene manager
+                    let mvp_buffer = Buffer::from_data(
+                        self.memory_allocator.as_ref().unwrap().clone(),
+                        BufferCreateInfo {
+                            usage: BufferUsage::UNIFORM_BUFFER,
+                            ..Default::default()
+                        },
+                        AllocationCreateInfo {
+                            memory_type_filter: MemoryTypeFilter::PREFER_HOST
+                                | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                            ..Default::default()
+                        },
+                        MVP::default().apply_camera_transforms(self.camera.unwrap()),
+                    )
+                    .unwrap();
+                    DescriptorSet::new(
+                        self.descriptor_set_allocator.clone().unwrap().clone(),
+                        layout.clone(),
+                        [WriteDescriptorSet::buffer(0, mvp_buffer)],
+                        [],
+                    )
+                    .unwrap()
+                };
                 if self.previous_frame_end.is_none() {
                     return;
                 }
