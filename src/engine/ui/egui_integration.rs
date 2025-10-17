@@ -4,9 +4,6 @@ use egui_winit_vulkano::{Gui, GuiConfig};
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use egui_winit_vulkano::{
-    Gui, GuiConfig,
-};
 use sysinfo::{Process, System};
 use vulkano::{
     command_buffer::SecondaryAutoCommandBuffer, device::Queue, render_pass::Subpass,
