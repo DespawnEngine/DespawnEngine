@@ -1,3 +1,4 @@
+use std::ops::Not;
 use std::sync::Arc;
 
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
@@ -34,12 +35,14 @@ use vulkano::{
     sync::{self, GpuFuture},
     Validated, VulkanError,
 };
+use winit::event::{DeviceEvent, DeviceId};
+use winit::window::CursorGrabMode;
 use winit::{
     application::ApplicationHandler, event::WindowEvent, event_loop::ActiveEventLoop,
     window::Window,
 };
 
-use crate::engine::rendering::camera;
+use crate::engine::core::input::{InputState, KeyBind};
 use crate::engine::rendering::mvp::MVP;
 use crate::engine::rendering::vertex::MyVertex;
 use crate::engine::rendering::vswapchain::{create_swapchain, window_size_dependent_setup};
@@ -48,8 +51,8 @@ use crate::engine::rendering::{
     camera::Camera,
     display::{create_main_window, create_render_pass, create_vertex_buffer},
 };
+use crate::engine::scenes::handling::scene_manager::SceneManager;
 use crate::engine::ui::egui_integration::EguiStruct;
-use crate::utils::math::Vec3;
 
 //
 // `App` holds the state of the application, including all Vulkan objects that need to persist between frames.
@@ -74,6 +77,10 @@ pub struct App {
     descriptor_set: Option<Arc<DescriptorSet>>,
     memory_allocator: Option<Arc<StandardMemoryAllocator>>,
     camera: Option<Camera>,
+    input_state: Option<InputState>,
+    last_frame_time: Option<std::time::Instant>,
+    capture_cursor: bool,
+    scene_manager: Option<SceneManager>, // MAIN GAME SCENE MANAGER
 }
 
 impl Default for App {
@@ -103,35 +110,35 @@ impl Default for App {
             descriptor_set: None,
             memory_allocator: None,
             camera: None,
+            input_state: None,
+            last_frame_time: None,
+            capture_cursor: true,
+            scene_manager: None, // MAIN GAME SCENE MANAGER
         }
     }
 }
 
-impl ApplicationHandler for App {
-    // This is called once when the application starts.
-    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        // Create the window
+// This is called once when the application starts.
+impl App
+{
+    fn create_window(&mut self, event_loop: &ActiveEventLoop) {
         let window = create_main_window(event_loop);
         self.window = Some(window.clone());
-
-        // Initialize Vulkan
+    }
+    fn create_vulkan(&mut self, event_loop: &ActiveEventLoop) {
         let instance = create_instance(event_loop);
-        let surface = swapchain::Surface::from_window(instance.clone(), window.clone()).unwrap();
+        let surface = swapchain::Surface::from_window(instance.clone(), self.window.as_ref().unwrap().clone()).unwrap();
         self.surface = Some(surface.clone());
 
         let (device, queue) = create_device_and_queue(instance, surface.clone());
         self.device = Some(device.clone());
         self.queue = Some(queue.clone());
 
-        let (swapchain, images) =
-            create_swapchain(device.clone(), surface.clone(), window.inner_size().into());
+        let (swapchain, images) = create_swapchain(device.clone(), surface.clone(), self.window.as_ref().unwrap().inner_size().into());
         self.swapchain = Some(swapchain.clone());
         self.images = Some(images.clone());
 
-        let command_buffer_allocator = Arc::new(StandardCommandBufferAllocator::new(
-            device.clone(),
-            Default::default(),
-        ));
+        let command_buffer_allocator = Arc::new(StandardCommandBufferAllocator::new(device.clone(), Default::default()));
         self.command_buffer_allocator = Some(command_buffer_allocator);
 
         // Define the render pass from display.rs
@@ -142,191 +149,256 @@ impl ApplicationHandler for App {
         let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
         self.memory_allocator = Some(memory_allocator.clone());
 
-        let vertex_buffer = create_vertex_buffer(self.memory_allocator.as_ref().unwrap().clone());
+        let vertex_buffer = create_vertex_buffer(memory_allocator.clone());
         self.vertex_buffer = Some(vertex_buffer);
 
-        self.camera = Some(Camera::from_pos(2.5, 2.5, 2.5));
+        self.camera = Some(Camera::from_pos(2.5, -2.5, 2.5));
 
-        let mvp_buffer = Buffer::from_data(
-            self.memory_allocator.as_ref().unwrap().clone(),
-            BufferCreateInfo {
-                usage: BufferUsage::UNIFORM_BUFFER,
-                ..Default::default()
-            },
-            AllocationCreateInfo {
-                memory_type_filter: MemoryTypeFilter::PREFER_HOST
-                    | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-                ..Default::default()
-            },
-            MVP::default(),
-        )
-        .unwrap();
+        let mvp_buffer = Buffer::from_data(memory_allocator.clone(), BufferCreateInfo { usage: BufferUsage::UNIFORM_BUFFER, ..Default::default() }, AllocationCreateInfo { memory_type_filter: MemoryTypeFilter::PREFER_HOST | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE, ..Default::default() }, MVP::default()).unwrap();
+        self.mvp_buffer = Some(mvp_buffer); // Temp store if needed later
 
-        let framebuffers = window_size_dependent_setup(
-            &images,
-            render_pass.clone(),
-            &mut self.viewport,
-            self.memory_allocator.as_ref().unwrap(), // Arc, not &Arc
-        );
-        // End of creating vertices for the triangle.
+        let framebuffers = window_size_dependent_setup(&images, render_pass.clone(), &mut self.viewport, &memory_allocator);
+        self.framebuffers = Some(framebuffers);
 
-        self.egui = Some(EguiStruct::new(
-            event_loop,
-            surface,
-            queue,
-            Subpass::from(render_pass.clone(), 1).unwrap(),
-        ));
+        self.egui = Some(EguiStruct::new(event_loop, surface, queue, Subpass::from(render_pass.clone(), 1).unwrap()));
 
-        let depth_stencil_state = DepthStencilState {
-            depth: Some(vulkano::pipeline::graphics::depth_stencil::DepthState {
-                write_enable: true,
-                compare_op: vulkano::pipeline::graphics::depth_stencil::CompareOp::Less,
-                //..Default::default()
-            }),
-            ..Default::default()
-        };
+        self.recreate_swapchain = false;
+        self.previous_frame_end = Some(sync::now(device.clone()).boxed());
+        self.input_state = Some(InputState::default());
+
+        // Create the SceneManager and call Awake/Start
+        let scene_manager = SceneManager::instance();
+        scene_manager.awake();
+        scene_manager.start();
+        self.scene_manager = Some(scene_manager);
+    }
+    fn create_pipeline(&mut self) {
+        let depth_stencil_state = DepthStencilState { depth: Some(vulkano::pipeline::graphics::depth_stencil::DepthState { write_enable: true, compare_op: vulkano::pipeline::graphics::depth_stencil::CompareOp::Less }), ..Default::default() };
 
         // Loading the vertex and fragment shaders
-        mod vs {
-            vulkano_shaders::shader! {
-                ty: "vertex",
-                path: "assets/shaders/first_triangle/vertex.glsl"
-            }
-        }
-        mod fs {
-            vulkano_shaders::shader! {
-                ty: "fragment",
-                path: "assets/shaders/first_triangle/fragment.glsl"
-            }
-        }
+        mod vs { vulkano_shaders::shader! { ty: "vertex", path: "assets/shaders/first_triangle/vertex.glsl" } }
+        mod fs { vulkano_shaders::shader! { ty: "fragment", path: "assets/shaders/first_triangle/fragment.glsl" } }
 
-        let vs = vs::load(device.clone()).expect("failed to create shader module");
-        let fs = fs::load(device.clone()).expect("failed to create shader module");
+        let vs = vs::load(self.device.as_ref().unwrap().clone()).expect("failed to create shader module");
+        let fs = fs::load(self.device.as_ref().unwrap().clone()).expect("failed to create shader module");
 
-        let viewport = Viewport {
-            offset: [0.0, 0.0],
-            extent: [1024.0, 1024.0],
-            depth_range: 0.0..=1.0,
-        };
+        let viewport = Viewport { offset: [0.0, 0.0], extent: [1024.0, 1024.0], depth_range: 0.0..=1.0 };
 
         // Creating the graphics pipeline
         let pipeline = {
-            let vs = vs.entry_point("main").unwrap();
-            let fs = fs.entry_point("main").unwrap();
+            let vs_entry = vs.entry_point("main").unwrap();
+            let fs_entry = fs.entry_point("main").unwrap();
 
-            let vertex_input_state = MyVertex::per_vertex().definition(&vs).unwrap();
+            let vertex_input_state = MyVertex::per_vertex().definition(&vs_entry).unwrap();
 
-            let stages = [
-                PipelineShaderStageCreateInfo::new(vs),
-                PipelineShaderStageCreateInfo::new(fs),
-            ];
+            let stages = [PipelineShaderStageCreateInfo::new(vs_entry), PipelineShaderStageCreateInfo::new(fs_entry)];
 
-            let layout = PipelineLayout::new(
-                device.clone(),
-                PipelineDescriptorSetLayoutCreateInfo::from_stages(&stages)
-                    .into_pipeline_layout_create_info(device.clone())
-                    .unwrap(),
-            )
-            .unwrap();
+            let layout = PipelineLayout::new(self.device.as_ref().unwrap().clone(), PipelineDescriptorSetLayoutCreateInfo::from_stages(&stages).into_pipeline_layout_create_info(self.device.as_ref().unwrap().clone()).unwrap()).unwrap();
 
-            let subpass = Subpass::from(render_pass.clone(), 0).unwrap();
+            let subpass = Subpass::from(self.render_pass.as_ref().unwrap().clone(), 0).unwrap();
 
-            GraphicsPipeline::new(
-                device.clone(),
-                None,
-                GraphicsPipelineCreateInfo {
-                    stages: stages.into_iter().collect(),
-                    vertex_input_state: Some(vertex_input_state),
-                    depth_stencil_state: Some(depth_stencil_state),
-                    input_assembly_state: Some(InputAssemblyState::default()),
-                    viewport_state: Some(ViewportState {
-                        viewports: [viewport].into_iter().collect(),
-                        ..Default::default()
-                    }),
-                    rasterization_state: Some(RasterizationState::default()),
-                    multisample_state: Some(MultisampleState::default()),
-                    color_blend_state: Some(ColorBlendState::with_attachment_states(
-                        subpass.num_color_attachments(),
-                        ColorBlendAttachmentState::default(),
-                    )),
-                    subpass: Some(subpass.into()),
-                    ..GraphicsPipelineCreateInfo::layout(layout)
-                },
-            )
-            .unwrap()
+            GraphicsPipeline::new(self.device.as_ref().unwrap().clone(), None, GraphicsPipelineCreateInfo {
+                stages: stages.into_iter().collect(),
+                vertex_input_state: Some(vertex_input_state),
+                depth_stencil_state: Some(depth_stencil_state),
+                input_assembly_state: Some(InputAssemblyState::default()),
+                viewport_state: Some(ViewportState { viewports: [viewport].into_iter().collect(), ..Default::default() }),
+                rasterization_state: Some(RasterizationState::default()),
+                multisample_state: Some(MultisampleState::default()),
+                color_blend_state: Some(ColorBlendState::with_attachment_states(subpass.num_color_attachments(), ColorBlendAttachmentState::default())),
+                subpass: Some(subpass.into()),
+                ..GraphicsPipelineCreateInfo::layout(layout)
+            }).unwrap()
         };
         self.pipeline = Some(pipeline.clone()); // store
 
-        let descriptor_set_allocator = Arc::new(StandardDescriptorSetAllocator::new(
-            device.clone(),
-            StandardDescriptorSetAllocatorCreateInfo::default(),
-        ));
+        let descriptor_set_allocator = Arc::new(StandardDescriptorSetAllocator::new(self.device.as_ref().unwrap().clone(), StandardDescriptorSetAllocatorCreateInfo::default()));
         let layout = pipeline.layout().set_layouts()[0].clone();
-        let set = DescriptorSet::new(
-            descriptor_set_allocator.clone(),
-            layout.clone(),
-            [WriteDescriptorSet::buffer(0, mvp_buffer.clone())],
-            [],
-        )
-        .unwrap();
+        let set = DescriptorSet::new(descriptor_set_allocator.clone(), layout.clone(), [WriteDescriptorSet::buffer(0, self.mvp_buffer.as_ref().unwrap().clone())], []).unwrap();
 
         self.descriptor_set_allocator = Some(descriptor_set_allocator);
         self.descriptor_set = Some(set);
+    }
+}
 
-        let framebuffers = window_size_dependent_setup(
-            &images,
-            render_pass.clone(),
-            &mut self.viewport,
-            &memory_allocator,
-        );
-        self.framebuffers = Some(framebuffers);
-        self.recreate_swapchain = false;
-        self.previous_frame_end = Some(sync::now(device.clone()).boxed());
+impl ApplicationHandler for App {
+    // This is called once when the application starts.
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        self.create_window(event_loop);
+        self.create_vulkan(event_loop);
+        self.create_pipeline();
     }
 
-    fn window_event(
+    fn device_event
+    (
+        &mut self,
+        _event_loop: &ActiveEventLoop,
+        _device_id: DeviceId,
+        event: DeviceEvent,
+    )
+    {
+        match event
+        {
+            DeviceEvent::MouseMotion { delta } =>
+            {
+                if self.capture_cursor
+                {
+                    self.input_state
+                        .as_mut()
+                        .expect("failed to get input state")
+                        .update_mouse(delta)
+                }
+            }
+            _ => (),
+        }
+    }
+
+    fn window_event
+    (
         &mut self,
         event_loop: &ActiveEventLoop,
         _window_id: winit::window::WindowId,
         event: WindowEvent,
-    ) {
+    )
+    {
         let egui = self.egui.as_mut().unwrap();
         egui.update(&event);
+
+        self.input_state
+            .as_mut()
+            .unwrap()
+            .update_just_pressed_into_held();
+        self.input_state
+            .as_mut()
+            .unwrap()
+            .handle_events(event.clone());
+
+        if self
+            .input_state
+            .as_ref()
+            .expect("failed to get input state")
+            .get_keybind_is_just_pressed(KeyBind::new("FreeMouse"))
+        {
+            self.capture_cursor = self.capture_cursor.not();
+        }
+
+        if self.capture_cursor
+        {
+            self.window
+                .as_mut()
+                .expect("failed to get window")
+                .set_cursor_grab(CursorGrabMode::Confined)
+                .expect("failed to set cursor grab mode to locked");
+            self.window
+                .as_mut()
+                .expect("failed to get window")
+                .set_cursor_visible(false);
+        } else
+        {
+            self.window
+                .as_mut()
+                .expect("failed to get window")
+                .set_cursor_grab(CursorGrabMode::None)
+                .expect("failed to set cursor grab mode to None");
+
+            self.window
+                .as_mut()
+                .expect("failed to get window")
+                .set_cursor_visible(true);
+        }
+
         match event {
-            WindowEvent::CloseRequested => {
+            WindowEvent::CloseRequested =>
+                {
                 event_loop.exit();
             }
             // On resize, simply flag that the swapchain needs to be recreated.
             // The actual recreation happens at the beginning of the next `RedrawRequested` event.
-            WindowEvent::Resized(_) => {
+            WindowEvent::Resized(_) =>
+            {
                 self.recreate_swapchain = true;
             }
-            WindowEvent::RedrawRequested => {
+            WindowEvent::RedrawRequested =>
+            {
+                // Calculate delta_time (example, using std::time::Instant stored in self)
+                let now = std::time::Instant::now();
+                let delta_time = if let Some(last_frame_time) = self.last_frame_time {
+                    let dt = now.duration_since(last_frame_time).as_secs_f32();
+                    dt.min(0.1) // clamp max delta to avoid big jumps
+                } else {
+                    1.0 / 60.0 // default first frame delta
+                };
+                self.last_frame_time = Some(now);
+
+                // Scene update order
+                if let Some(scene_manager) = &self.scene_manager {
+                    if let (Some(input_state), Some(camera)) = (self.input_state.as_mut(), self.camera.as_mut()) {
+                        scene_manager.fixed_update(delta_time, input_state, camera);
+                        scene_manager.update(delta_time, input_state, camera);
+                        scene_manager.late_update(delta_time, input_state, camera);
+                    }
+                }
+
                 egui.redraw();
 
-                let layout = self.pipeline.clone().unwrap().layout().set_layouts()[0].clone(); // use
+                // Camera update is now handled in the scene
 
-                let mvp_buffer = Buffer::from_data(
-                    self.memory_allocator.as_ref().unwrap().clone(),
-                    BufferCreateInfo {
-                        usage: BufferUsage::UNIFORM_BUFFER,
-                        ..Default::default()
-                    },
-                    AllocationCreateInfo {
-                        memory_type_filter: MemoryTypeFilter::PREFER_HOST
-                            | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-                        ..Default::default()
-                    },
-                    MVP::default().apply_camera_transforms(self.camera.unwrap()),
-                )
-                .unwrap();
-                let set = DescriptorSet::new(
-                    self.descriptor_set_allocator.clone().unwrap().clone(),
-                    layout.clone(),
-                    [WriteDescriptorSet::buffer(0, mvp_buffer.clone())],
-                    [],
-                )
-                .unwrap();
+                // Create MVP descriptor set through the scene manager
+                let layout = self.pipeline.clone().unwrap().layout().set_layouts()[0].clone();
+                let set = if let Some(scene_manager) = &self.scene_manager {
+                    scene_manager.create_mvp_descriptor_set(
+                        self.memory_allocator.as_ref().unwrap(),
+                        self.descriptor_set_allocator.as_ref().unwrap(),
+                        &layout,
+                        self.camera.as_ref().unwrap()
+                    ).unwrap_or_else(|| {
+                        // Fallback to default MVP buffer if scene doesn't provide one
+                        let mvp_buffer = Buffer::from_data(
+                            self.memory_allocator.as_ref().unwrap().clone(),
+                            BufferCreateInfo {
+                                usage: BufferUsage::UNIFORM_BUFFER,
+                                ..Default::default()
+                            },
+                            AllocationCreateInfo {
+                                memory_type_filter: MemoryTypeFilter::PREFER_HOST
+                                    | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                                ..Default::default()
+                            },
+                            MVP::default().apply_camera_transforms(self.camera.unwrap()),
+                        )
+                        .unwrap();
+                        DescriptorSet::new(
+                            self.descriptor_set_allocator.clone().unwrap().clone(),
+                            layout.clone(),
+                            [WriteDescriptorSet::buffer(0, mvp_buffer)],
+                            [],
+                        )
+                        .unwrap()
+                    })
+                } else {
+                    // Fallback if no scene manager
+                    let mvp_buffer = Buffer::from_data(
+                        self.memory_allocator.as_ref().unwrap().clone(),
+                        BufferCreateInfo {
+                            usage: BufferUsage::UNIFORM_BUFFER,
+                            ..Default::default()
+                        },
+                        AllocationCreateInfo {
+                            memory_type_filter: MemoryTypeFilter::PREFER_HOST
+                                | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                            ..Default::default()
+                        },
+                        MVP::default().apply_camera_transforms(self.camera.unwrap()),
+                    )
+                    .unwrap();
+                    DescriptorSet::new(
+                        self.descriptor_set_allocator.clone().unwrap().clone(),
+                        layout.clone(),
+                        [WriteDescriptorSet::buffer(0, mvp_buffer)],
+                        [],
+                    )
+                    .unwrap()
+                };
                 if self.previous_frame_end.is_none() {
                     return;
                 }
@@ -389,6 +461,12 @@ impl ApplicationHandler for App {
                 // Build the command buffer for this frame's drawing commands.
                 let image_extent: [u32; 2] = window.inner_size().into(); // Image extent
 
+                // Do scene manager lifecycle draw
+                if let Some(scene_manager) = &self.scene_manager {
+                    scene_manager.draw();
+                }
+
+                // START BUILDING BUFFERS
                 let mut cmd_buffer_builder = AutoCommandBufferBuilder::primary(
                     command_buffer_allocator.clone(),
                     queue.queue_family_index(),
@@ -425,7 +503,7 @@ impl ApplicationHandler for App {
                     )
                     .unwrap();
 
-                // Wrap draw call in an unsafe block so it works :|
+                // Wrap the draw call in an unsafe block so it works :|
                 unsafe {
                     cmd_buffer_builder
                         .draw(self.vertex_buffer.as_ref().unwrap().len() as u32, 1, 0, 0)
@@ -481,6 +559,10 @@ impl ApplicationHandler for App {
                         self.previous_frame_end = Some(sync::now(device.clone()).boxed());
                     }
                 }
+                self.input_state
+                    .as_mut()
+                    .expect("failed to unwrap input state")
+                    .reset_deltas();
             }
             _ => (),
         }

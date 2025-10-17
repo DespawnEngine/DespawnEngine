@@ -1,18 +1,19 @@
-use std::sync::Arc;
-use winit::window::{Icon, Window};
+use crate::arguments;
+use crate::engine::rendering::vertex::MyVertex;
 use image::GenericImageView;
+use std::sync::Arc;
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer};
 use vulkano::device::Device;
 use vulkano::format::Format;
 use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
 use vulkano::render_pass::RenderPass;
 use winit::event_loop::ActiveEventLoop;
-use crate::arguments;
-use crate::engine::rendering::vertex::MyVertex;
+use winit::window::{Icon, Window};
+
+use crate::engine::rendering::vswapchain::IMAGE_FORMAT;
 // "image" crate uses this for loading images
 
 // This display script will contain almost all window functionality later, hopefully. Need to make sure I didn't break linux though first.
-
 // Creating the main window with definitions
 pub fn create_main_window(event_loop: &ActiveEventLoop) -> Arc<Window> {
     let window_attributes = Window::default_attributes()
@@ -29,7 +30,7 @@ pub fn create_render_pass(device: Arc<Device>) -> Arc<RenderPass> {
         device,
         attachments: {
             color: {
-                format: Format::R8G8B8A8_SRGB,
+                format: IMAGE_FORMAT,
                 samples: 1,
                 load_op: Clear,
                 store_op: Store,
@@ -53,58 +54,14 @@ pub fn create_render_pass(device: Arc<Device>) -> Arc<RenderPass> {
                 input: []
             }
         ]
-    ).unwrap()
+    )
+    .unwrap()
 }
 
-// Create vertex buffer and simple cube rendering
-pub fn create_vertex_buffer(
-    allocator: Arc<StandardMemoryAllocator>,
-) -> Subbuffer<[MyVertex]> {
-    let vertex_data = [
-        // Front face
-        MyVertex { position: [-0.5, -0.5,  0.5].into(), color: [1.0, 0.0, 0.0].into() },
-        MyVertex { position: [ 0.5, -0.5,  0.5].into(), color: [0.0, 1.0, 0.0].into() },
-        MyVertex { position: [ 0.5,  0.5,  0.5].into(), color: [0.0, 0.0, 1.0].into() },
-        MyVertex { position: [-0.5,  0.5,  0.5].into(), color: [1.0, 1.0, 0.0].into() },
-
-        // Back face
-        MyVertex { position: [-0.5, -0.5, -0.5].into(), color: [1.0, 0.0, 1.0].into() },
-        MyVertex { position: [ 0.5, -0.5, -0.5].into(), color: [0.0, 1.0, 1.0].into() },
-        MyVertex { position: [ 0.5,  0.5, -0.5].into(), color: [0.5, 0.5, 0.5].into() },
-        MyVertex { position: [-0.5,  0.5, -0.5].into(), color: [1.0, 1.0, 1.0].into() },
-    ];
-
-    // Define triangles using these vertices
-    let index_order = [
-        0, 1, 2, 2, 3, 0, // front
-        1, 5, 6, 6, 2, 1, // right
-        5, 4, 7, 7, 6, 5, // back
-        4, 0, 3, 3, 7, 4, // left
-        3, 2, 6, 6, 7, 3, // top
-        4, 5, 1, 1, 0, 4, // bottom
-    ];
-
-    let full_vertex_data: Vec<MyVertex> = index_order
-        .iter()
-        .map(|&i| vertex_data[i].clone())
-        .collect();
-
-    Buffer::from_iter(
-        allocator.clone(),
-        BufferCreateInfo {
-            usage: BufferUsage::VERTEX_BUFFER,
-            ..Default::default()
-        },
-        AllocationCreateInfo {
-            memory_type_filter: MemoryTypeFilter::PREFER_HOST
-                | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-            ..Default::default()
-        },
-        full_vertex_data,
-    ).unwrap()
+// Cube module
+pub fn create_vertex_buffer(allocator: Arc<StandardMemoryAllocator>) -> Subbuffer<[MyVertex]> {
+    crate::engine::rendering::cube::create_cube_vertex_buffer(allocator)
 }
-
-
 
 // Helper function for loading an icon for the window icon. Code will likely be changed, but I wanted to experiment to learn more.
 pub fn load_icon(path: &str) -> Icon {

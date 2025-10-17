@@ -7,7 +7,16 @@ use vulkano::pipeline::graphics::vertex_input::Vertex;
 #[repr(C)]
 pub struct MyVertex {
     #[format(R32G32B32_SFLOAT)]
-    pub position: Vec3,  // now matches the format (3 * 4 bytes = 12)
+    pub position: Vec3, // now matches the format (3 * 4 bytes = 12)
     #[format(R32G32B32_SFLOAT)]
     pub color: Vec3,
+}
+
+impl MyVertex {
+    pub fn new<T: Into<Vec3>>(pos: T, col: T) -> Self {
+        MyVertex {
+            position: pos.into(),
+            color: col.into(),
+        }
+    }
 }

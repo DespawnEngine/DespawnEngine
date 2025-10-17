@@ -1,5 +1,5 @@
+use egui::{self, Context, RichText, FontDefinitions, ProgressBar};
 use egui_plot::{uniform_grid_spacer, Line, Plot, PlotPoints};
-use egui::{self, Context, FontDefinitions, RichText};
 use std::{collections::VecDeque, sync::Arc};
 use sysinfo::{Process, System};
 use vulkano::device::Queue;
