@@ -58,47 +58,9 @@ pub fn create_render_pass(device: Arc<Device>) -> Arc<RenderPass> {
     .unwrap()
 }
 
-// Create vertex buffer and simple cube rendering
+// Cube module
 pub fn create_vertex_buffer(allocator: Arc<StandardMemoryAllocator>) -> Subbuffer<[MyVertex]> {
-    let vertex_data = [
-        // Front face
-        MyVertex::new([-0.5, -0.5, 0.5], [1.0, 0.0, 0.0]),
-        MyVertex::new([0.5, -0.5, 0.5], [0.0, 1.0, 0.0]),
-        MyVertex::new([0.5, 0.5, 0.5], [0.0, 0.0, 1.0]),
-        MyVertex::new([-0.5, 0.5, 0.5], [1.0, 1.0, 0.0]),
-        // Back face
-        MyVertex::new([-0.5, -0.5, -0.5], [1.0, 0.0, 1.0]),
-        MyVertex::new([0.5, -0.5, -0.5], [0.0, 1.0, 1.0]),
-        MyVertex::new([0.5, 0.5, -0.5], [0.5, 0.5, 0.5]),
-        MyVertex::new([-0.5, 0.5, -0.5], [1.0, 1.0, 1.0]),
-    ];
-
-    // Define triangles using these vertices
-    let index_order = [
-        0, 1, 2, 2, 3, 0, // front
-        1, 5, 6, 6, 2, 1, // right
-        5, 4, 7, 7, 6, 5, // back
-        4, 0, 3, 3, 7, 4, // left
-        3, 2, 6, 6, 7, 3, // top
-        4, 5, 1, 1, 0, 4, // bottom
-    ];
-
-    let full_vertex_data: Vec<MyVertex> = index_order.iter().map(|&i| vertex_data[i]).collect();
-
-    Buffer::from_iter(
-        allocator.clone(),
-        BufferCreateInfo {
-            usage: BufferUsage::VERTEX_BUFFER,
-            ..Default::default()
-        },
-        AllocationCreateInfo {
-            memory_type_filter: MemoryTypeFilter::PREFER_HOST
-                | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-            ..Default::default()
-        },
-        full_vertex_data,
-    )
-    .unwrap()
+    crate::engine::rendering::cube::create_cube_vertex_buffer(allocator)
 }
 
 // Helper function for loading an icon for the window icon. Code will likely be changed, but I wanted to experiment to learn more.
