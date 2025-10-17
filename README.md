@@ -1,4 +1,6 @@
 # DespawnEngine
-Open source voxel game engine. Planned to be actually useful for developers.
+Open-source voxel game engine. Planned to be a one-stop shop for developers, with flexibility, high-performance, and freedom to sell games without annoying restrictions.
 
-This engine uses Rust + Vulkano.
+Focused on block-based, grid-aligned worlds, including fully destructible and placeable terrain.
+
+Built in Rust + Vulkano to take advantage of modern hardware.
