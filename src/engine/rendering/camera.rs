@@ -3,6 +3,10 @@ use std::cmp::min;
 use crate::engine::core::input::{InputState, KeyBind};
 use glam::{Quat, Vec3};
 
+/// Currently this handles movement. Later the movement code will be exclusive to the player or entity controller.
+/// The camera will be used for all scenes later, so code can remain simple. May need to make multiple camera types later.
+/// This is just a simple fly camera for debugging purposes.
+
 const MAX_PITCH_DEG: f32 = 89.99;
 
 #[derive(Clone, Copy, Debug)]
