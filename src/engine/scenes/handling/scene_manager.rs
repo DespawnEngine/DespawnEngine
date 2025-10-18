@@ -9,6 +9,8 @@ use vulkano::memory::allocator::StandardMemoryAllocator;
 use vulkano::descriptor_set::DescriptorSet;
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::descriptor_set::layout::DescriptorSetLayout;
+use vulkano::image::sampler::Sampler;
+use vulkano::image::view::ImageView;
 
 #[derive(Clone)]
 pub struct SceneManager
@@ -141,19 +143,19 @@ impl SceneManager
         self.with_current_scene(|scene| scene.draw());
     }
 
-    pub fn create_mvp_descriptor_set(&self, 
+    pub fn create_mvp_descriptor_set(&self,
         memory_allocator: &Arc<StandardMemoryAllocator>,
         descriptor_set_allocator: &Arc<StandardDescriptorSetAllocator>,
         layout: &Arc<DescriptorSetLayout>,
-        camera: &Camera
+        camera: &Camera,
+        texture_view: &Arc<ImageView>,
+        sampler: &Arc<Sampler>,
     ) -> Option<Arc<DescriptorSet>> {
         let scene_type = *self.current_scene.lock().unwrap();
-        if let Some(scene_type) = scene_type
-        {
+        if let Some(scene_type) = scene_type {
             let scenes = self.scenes.lock().unwrap();
-            if let Some((_, scene)) = scenes.iter().find(|(st, _)| *st == scene_type)
-            {
-                return scene.create_mvp_descriptor_set(memory_allocator, descriptor_set_allocator, layout, camera);
+            if let Some((_, scene)) = scenes.iter().find(|(st, _)| *st == scene_type) {
+                return scene.create_mvp_descriptor_set(memory_allocator, descriptor_set_allocator, layout, camera, texture_view, sampler);
             }
         }
         None
