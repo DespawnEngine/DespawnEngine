@@ -5,6 +5,8 @@ use vulkano::descriptor_set::DescriptorSet;
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::descriptor_set::layout::DescriptorSetLayout;
 use std::sync::Arc;
+use vulkano::image::sampler::Sampler;
+use vulkano::image::view::ImageView;
 
 pub trait Scene: Send {
     fn awake(&mut self) {
@@ -32,13 +34,14 @@ pub trait Scene: Send {
         // Runs after Update, Fixed Update, and Late Update.
     }
 
-    fn create_mvp_descriptor_set(&self, 
+    fn create_mvp_descriptor_set(&self,
         _memory_allocator: &Arc<StandardMemoryAllocator>,
         _descriptor_set_allocator: &Arc<StandardDescriptorSetAllocator>,
         _layout: &Arc<DescriptorSetLayout>,
-        _camera: &Camera
+        _camera: &Camera,
+        _texture_view: &Arc<ImageView>,
+        _sampler: &Arc<Sampler>,
     ) -> Option<Arc<DescriptorSet>> {
-        // Default implementation returns None - scenes can override this
         None
     }
 }
