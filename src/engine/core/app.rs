@@ -1,6 +1,7 @@
-use vulkano::image::{sampler, ImageType};
 use std::ops::Not;
 use std::sync::Arc;
+use std::time::{self, Instant};
+use vulkano::image::{ImageType, sampler};
 
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
 use vulkano::descriptor_set::DescriptorSet;
@@ -56,14 +57,14 @@ use crate::engine::rendering::{
 use crate::engine::scenes::handling::scene_manager::SceneManager;
 use crate::engine::ui::egui_integration::EguiStruct;
 
-use vulkano::image::ImageCreateInfo;
-use vulkano::image::ImageUsage;
-use vulkano::image::view::ImageView;
-use vulkano::image::sampler::{Sampler, SamplerCreateInfo, Filter};
-use vulkano::format::Format;
 use image::io::Reader as ImageReader;
 use std::io::Cursor;
 use vulkano::command_buffer::CopyBufferToImageInfo;
+use vulkano::format::Format;
+use vulkano::image::ImageCreateInfo;
+use vulkano::image::ImageUsage;
+use vulkano::image::sampler::{Filter, Sampler, SamplerCreateInfo};
+use vulkano::image::view::ImageView;
 
 //
 // `App` holds the state of the application, including all Vulkan objects that need to persist between frames.
@@ -178,8 +179,10 @@ impl App {
 
         let tex_bytes = include_bytes!("../../../assets/texture.png");
         let img = ImageReader::new(Cursor::new(tex_bytes))
-            .with_guessed_format().unwrap()
-            .decode().unwrap()
+            .with_guessed_format()
+            .unwrap()
+            .decode()
+            .unwrap()
             .into_rgba8();
 
         let (width, height) = img.dimensions();
@@ -199,7 +202,8 @@ impl App {
                 memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
                 ..Default::default()
             },
-        ).unwrap();
+        )
+        .unwrap();
 
         // Upload pixels via a staging buffer
         let staging_buffer = Buffer::from_iter(
@@ -214,13 +218,15 @@ impl App {
                 ..Default::default()
             },
             img_data,
-        ).unwrap();
+        )
+        .unwrap();
 
         let mut builder = AutoCommandBufferBuilder::primary(
             self.command_buffer_allocator.as_ref().unwrap().clone(),
             queue.queue_family_index(),
             CommandBufferUsage::OneTimeSubmit,
-        ).unwrap();
+        )
+        .unwrap();
 
         builder
             .copy_buffer_to_image(CopyBufferToImageInfo::buffer_image(
@@ -231,8 +237,10 @@ impl App {
 
         let command_buffer = builder.build().unwrap();
         let future = sync::now(device.clone())
-            .then_execute(queue.clone(), command_buffer).unwrap()
-            .then_signal_fence_and_flush().unwrap();
+            .then_execute(queue.clone(), command_buffer)
+            .unwrap()
+            .then_signal_fence_and_flush()
+            .unwrap();
         future.wait(None).unwrap();
 
         // Create the view & sampler
@@ -244,7 +252,8 @@ impl App {
                 min_filter: Filter::Nearest,
                 ..Default::default()
             },
-        ).unwrap();
+        )
+        .unwrap();
 
         self.texture = Some(texture);
         self.sampler = Some(sampler);
@@ -360,7 +369,10 @@ impl App {
                         viewports: [viewport].into_iter().collect(),
                         ..Default::default()
                     }),
-                    rasterization_state: Some(RasterizationState::default()),
+                    rasterization_state: Some(RasterizationState {
+                        cull_mode: vulkano::pipeline::graphics::rasterization::CullMode::Back,
+                        ..Default::default()
+                    }),
                     multisample_state: Some(MultisampleState::default()),
                     color_blend_state: Some(ColorBlendState::with_attachment_states(
                         subpass.num_color_attachments(),
@@ -374,16 +386,27 @@ impl App {
         };
         self.pipeline = Some(pipeline.clone()); // store
 
-        let descriptor_set_allocator = Arc::new(StandardDescriptorSetAllocator::new(self.device.as_ref().unwrap().clone(), StandardDescriptorSetAllocatorCreateInfo::default()));
+        let descriptor_set_allocator = Arc::new(StandardDescriptorSetAllocator::new(
+            self.device.as_ref().unwrap().clone(),
+            StandardDescriptorSetAllocatorCreateInfo::default(),
+        ));
         self.descriptor_set_allocator = Some(descriptor_set_allocator.clone());
         let descriptor_set_allocator = Arc::new(StandardDescriptorSetAllocator::new(
             self.device.as_ref().unwrap().clone(),
             StandardDescriptorSetAllocatorCreateInfo::default(),
         ));
         let layout = pipeline.layout().set_layouts()[0].clone();
-        let mut writes = vec![WriteDescriptorSet::buffer(0, self.mvp_buffer.as_ref().unwrap().clone())];
-        writes.push(WriteDescriptorSet::image_view_sampler(1, self.texture.as_ref().unwrap().clone(), self.sampler.as_ref().unwrap().clone()));
-        let set = DescriptorSet::new(descriptor_set_allocator.clone(), layout.clone(), writes, []).unwrap();
+        let mut writes = vec![WriteDescriptorSet::buffer(
+            0,
+            self.mvp_buffer.as_ref().unwrap().clone(),
+        )];
+        writes.push(WriteDescriptorSet::image_view_sampler(
+            1,
+            self.texture.as_ref().unwrap().clone(),
+            self.sampler.as_ref().unwrap().clone(),
+        ));
+        let set = DescriptorSet::new(descriptor_set_allocator.clone(), layout.clone(), writes, [])
+            .unwrap();
         self.descriptor_set = Some(set);
         let set = DescriptorSet::new(
             descriptor_set_allocator.clone(),
@@ -435,7 +458,10 @@ impl ApplicationHandler for App {
         event: WindowEvent,
     ) {
         let egui = self.egui.as_mut().unwrap();
-        egui.update(&event);
+        egui.update(
+            &event,
+            self.last_frame_time.unwrap_or(Instant::now()).elapsed(),
+        );
 
         self.input_state
             .as_mut()
@@ -488,7 +514,6 @@ impl ApplicationHandler for App {
                 self.recreate_swapchain = true;
             }
             WindowEvent::RedrawRequested => {
-                // Calculate delta_time (example, using std::time::Instant stored in self)
                 let now = std::time::Instant::now();
                 let delta_time = if let Some(last_frame_time) = self.last_frame_time {
                     let dt = now.duration_since(last_frame_time).as_secs_f32();
@@ -516,50 +541,80 @@ impl ApplicationHandler for App {
                 // Create MVP descriptor set through the scene manager
                 let layout = self.pipeline.clone().unwrap().layout().set_layouts()[0].clone();
                 let set = if let Some(scene_manager) = &self.scene_manager {
-                    scene_manager.create_mvp_descriptor_set(
-                        self.memory_allocator.as_ref().unwrap(),
-                        self.descriptor_set_allocator.as_ref().unwrap(),
-                        &layout,
-                        self.camera.as_ref().unwrap(),
-                        self.texture.as_ref().unwrap(),
-                        self.sampler.as_ref().unwrap(),
-                    ).unwrap_or_else(|| {
-                        // Fallback to default MVP buffer if scene doesn't provide one
-                        let mvp = MVP::default().apply_camera_transforms(*self.camera.as_ref().unwrap());
-                        let mvp_buffer = Buffer::from_data(
-                            self.memory_allocator.as_ref().unwrap().clone(),
-                            BufferCreateInfo { usage: BufferUsage::UNIFORM_BUFFER, ..Default::default() },
-                            AllocationCreateInfo { memory_type_filter: MemoryTypeFilter::PREFER_HOST | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE, ..Default::default() },
-                            mvp,
-                        ).unwrap();
+                    scene_manager
+                        .create_mvp_descriptor_set(
+                            self.memory_allocator.as_ref().unwrap(),
+                            self.descriptor_set_allocator.as_ref().unwrap(),
+                            &layout,
+                            self.camera.as_ref().unwrap(),
+                            self.texture.as_ref().unwrap(),
+                            self.sampler.as_ref().unwrap(),
+                        )
+                        .unwrap_or_else(|| {
+                            // Fallback to default MVP buffer if scene doesn't provide one
+                            let mvp = MVP::default()
+                                .apply_camera_transforms(*self.camera.as_ref().unwrap());
+                            let mvp_buffer = Buffer::from_data(
+                                self.memory_allocator.as_ref().unwrap().clone(),
+                                BufferCreateInfo {
+                                    usage: BufferUsage::UNIFORM_BUFFER,
+                                    ..Default::default()
+                                },
+                                AllocationCreateInfo {
+                                    memory_type_filter: MemoryTypeFilter::PREFER_HOST
+                                        | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                                    ..Default::default()
+                                },
+                                mvp,
+                            )
+                            .unwrap();
 
-                        let mut writes = vec![WriteDescriptorSet::buffer(0, mvp_buffer)];
-                        writes.push(WriteDescriptorSet::image_view_sampler(1, self.texture.as_ref().unwrap().clone(), self.sampler.as_ref().unwrap().clone()));
-                        DescriptorSet::new(
-                            self.descriptor_set_allocator.as_ref().unwrap().clone(),
-                            layout.clone(),
-                            writes,
-                            [],
-                        ).unwrap()
-                    })
+                            let mut writes = vec![WriteDescriptorSet::buffer(0, mvp_buffer)];
+                            writes.push(WriteDescriptorSet::image_view_sampler(
+                                1,
+                                self.texture.as_ref().unwrap().clone(),
+                                self.sampler.as_ref().unwrap().clone(),
+                            ));
+                            DescriptorSet::new(
+                                self.descriptor_set_allocator.as_ref().unwrap().clone(),
+                                layout.clone(),
+                                writes,
+                                [],
+                            )
+                            .unwrap()
+                        })
                 } else {
                     // Fallback if no scene manager
-                    let mvp = MVP::default().apply_camera_transforms(*self.camera.as_ref().unwrap());
+                    let mvp =
+                        MVP::default().apply_camera_transforms(*self.camera.as_ref().unwrap());
                     let mvp_buffer = Buffer::from_data(
                         self.memory_allocator.as_ref().unwrap().clone(),
-                        BufferCreateInfo { usage: BufferUsage::UNIFORM_BUFFER, ..Default::default() },
-                        AllocationCreateInfo { memory_type_filter: MemoryTypeFilter::PREFER_HOST | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE, ..Default::default() },
+                        BufferCreateInfo {
+                            usage: BufferUsage::UNIFORM_BUFFER,
+                            ..Default::default()
+                        },
+                        AllocationCreateInfo {
+                            memory_type_filter: MemoryTypeFilter::PREFER_HOST
+                                | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                            ..Default::default()
+                        },
                         mvp,
-                    ).unwrap();
+                    )
+                    .unwrap();
 
                     let mut writes = vec![WriteDescriptorSet::buffer(0, mvp_buffer)];
-                    writes.push(WriteDescriptorSet::image_view_sampler(1, self.texture.as_ref().unwrap().clone(), self.sampler.as_ref().unwrap().clone()));
+                    writes.push(WriteDescriptorSet::image_view_sampler(
+                        1,
+                        self.texture.as_ref().unwrap().clone(),
+                        self.sampler.as_ref().unwrap().clone(),
+                    ));
                     DescriptorSet::new(
                         self.descriptor_set_allocator.as_ref().unwrap().clone(),
                         layout.clone(),
                         writes,
                         [],
-                    ).unwrap()
+                    )
+                    .unwrap()
                 };
                 if self.previous_frame_end.is_none() {
                     return;
