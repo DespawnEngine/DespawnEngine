@@ -5,4 +5,4 @@ pub mod vertex;
 pub mod mvp;
 pub mod camera;
 pub(crate) mod descriptor_helpers;
-mod cube;
+pub(crate) mod cube;

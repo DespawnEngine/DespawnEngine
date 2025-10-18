@@ -1,0 +1,9 @@
+{
+  id: "template:air",
+  name: "Air",
+  texture: "", // Air has no texture. Maybe handle this better later
+  "properties": {
+    "is_air": true,
+    "is_solid": false
+  }
+}

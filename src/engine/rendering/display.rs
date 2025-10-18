@@ -58,7 +58,7 @@ pub fn create_render_pass(device: Arc<Device>) -> Arc<RenderPass> {
     .unwrap()
 }
 
-// Cube module
+// Cube module //TODO: This shouldn't be needed like this. Remove later and make chunk mesh create its own.
 pub fn create_vertex_buffer(allocator: Arc<StandardMemoryAllocator>) -> Subbuffer<[MyVertex]> {
     crate::engine::rendering::cube::create_cube_vertex_buffer(allocator)
 }

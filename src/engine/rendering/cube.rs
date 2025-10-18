@@ -3,7 +3,8 @@ use std::sync::Arc;
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer};
 use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
 
-pub fn create_cube_vertex_buffer(allocator: Arc<StandardMemoryAllocator>) -> Subbuffer<[MyVertex]> {
+/// Returns cube vertices
+pub fn get_cube_vertices() -> Vec<MyVertex> {
     let vertex_data = [
         // Front face (z+)
         MyVertex { position: [-0.5, -0.5,  0.5].into(), color: [1.0, 0.0, 0.0].into(), tex_coords: [0.0, 0.0] }, // E
@@ -52,12 +53,17 @@ pub fn create_cube_vertex_buffer(allocator: Arc<StandardMemoryAllocator>) -> Sub
         20, 21, 22, 22, 23, 20, // top
     ];
 
-    let full_vertex_data: Vec<MyVertex> = index_order.iter().map(|&i| vertex_data[i]).collect();
+    index_order.iter().map(|&i| vertex_data[i]).collect()
+}
+
+/// Creates a GPU vertex buffer for a unit cube (debug single cube)
+pub fn create_cube_vertex_buffer(allocator: Arc<StandardMemoryAllocator>) -> Subbuffer<[MyVertex]> {
+    let vertices = get_cube_vertices();
 
     Buffer::from_iter(
         allocator,
         BufferCreateInfo { usage: BufferUsage::VERTEX_BUFFER, ..Default::default() },
         AllocationCreateInfo { memory_type_filter: MemoryTypeFilter::PREFER_HOST | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE, ..Default::default() },
-        full_vertex_data,
+        vertices,
     ).unwrap()
 }
