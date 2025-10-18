@@ -2,7 +2,6 @@ use vulkano::image::{sampler, ImageType};
 use std::ops::Not;
 use std::sync::Arc;
 use std::time::{self, Instant};
-use vulkano::image::{ImageType, sampler};
 
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
 use vulkano::descriptor_set::DescriptorSet;
@@ -58,11 +57,6 @@ use crate::engine::rendering::{
 use crate::engine::scenes::handling::scene_manager::SceneManager;
 use crate::engine::ui::egui_integration::EguiStruct;
 
-use vulkano::image::ImageCreateInfo;
-use vulkano::image::ImageUsage;
-use vulkano::image::view::ImageView;
-use vulkano::image::sampler::{Sampler, SamplerCreateInfo, Filter};
-use vulkano::format::Format;
 use image::io::Reader as ImageReader;
 use std::io::Cursor;
 use vulkano::command_buffer::CopyBufferToImageInfo;
@@ -716,11 +710,6 @@ impl ApplicationHandler for App {
 
                 // Build the command buffer for this frame's drawing commands.
                 let image_extent: [u32; 2] = window.inner_size().into(); // Image extent
-
-                // Do scene manager lifecycle draw
-                if let Some(scene_manager) = &self.scene_manager {
-                    scene_manager.draw();
-                }
 
                 // START BUILDING BUFFERS
                 let mut cmd_buffer_builder = AutoCommandBufferBuilder::primary(
