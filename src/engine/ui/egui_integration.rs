@@ -4,7 +4,7 @@ use egui_winit_vulkano::{Gui, GuiConfig};
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use sysinfo::{Process, System};
+use sysinfo::{Process, ProcessRefreshKind, ProcessesToUpdate, RefreshKind, System};
 use vulkano::{
     command_buffer::SecondaryAutoCommandBuffer, device::Queue, render_pass::Subpass,
     swapchain::Surface,
@@ -18,6 +18,7 @@ pub struct EguiStruct {
     queue: Arc<Queue>, // For GPU info
     last_update: Instant,
     update_interval: Duration, // frequently to update the UI window
+    delta_time: Duration,
     debug_ui: DebugUi,
 }
 
@@ -50,23 +51,38 @@ impl EguiStruct {
             queue,
             last_update: Instant::now(),
             update_interval: Duration::from_secs_f64(0.5),
+
+            delta_time: Duration::new(1, 0),
             debug_ui,
         }
     }
 
-    pub fn update(&mut self, event: &WindowEvent) {
+    pub fn update(&mut self, event: &WindowEvent, dt: Duration) {
+        self.delta_time = dt;
         self.gui.update(event);
     }
 
     pub fn redraw(&mut self) {
         if self.last_update.elapsed() >= self.update_interval {
-            self.system.refresh_all();
+            let pid: [sysinfo::Pid; 1] = [sysinfo::Pid::from_u32(std::process::id())];
+
+            // kinda expensive; (Debug build times)
+            // ~14ms with tasks,
+            // ~1ms without tasks,
+            // disabling the other options brings it down to ~890 us
+            // but its literally getting no information at that point
+            self.system.refresh_processes_specifics(
+                ProcessesToUpdate::Some(&pid),
+                false,
+                ProcessRefreshKind::everything().without_tasks(),
+            );
+
             self.last_update = Instant::now();
         }
 
         self.gui.immediate_ui(|gui| {
             let ctx = gui.context();
-            self.debug_ui.render(&ctx, &self.system);
+            self.debug_ui.render(&ctx, &self.system, self.delta_time);
         });
     }
 
