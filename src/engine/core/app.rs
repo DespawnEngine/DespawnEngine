@@ -7,8 +7,6 @@ use vulkano::descriptor_set::DescriptorSet;
 use vulkano::descriptor_set::WriteDescriptorSet;
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocatorCreateInfo;
-use vulkano::descriptor_set::DescriptorSet;
-use vulkano::descriptor_set::WriteDescriptorSet;
 use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter};
 use vulkano::pipeline::Pipeline;
 use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
@@ -33,12 +31,10 @@ use vulkano::{
             viewport::{Viewport, ViewportState},
         },
         layout::PipelineDescriptorSetLayoutCreateInfo,
-        GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo,
     },
     render_pass::Subpass,
     swapchain::{self},
     sync::{self, GpuFuture},
-    Validated, VulkanError,
 };
 use winit::event::{DeviceEvent, DeviceId};
 use winit::window::CursorGrabMode;
