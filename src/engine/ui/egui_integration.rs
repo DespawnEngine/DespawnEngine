@@ -4,7 +4,7 @@ use egui_winit_vulkano::{Gui, GuiConfig};
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use sysinfo::{Process, System};
+use sysinfo::{Process, ProcessRefreshKind, ProcessesToUpdate, RefreshKind, System};
 use vulkano::{
     command_buffer::SecondaryAutoCommandBuffer, device::Queue, render_pass::Subpass,
     swapchain::Surface,
@@ -60,7 +60,19 @@ impl EguiStruct {
 
     pub fn redraw(&mut self) {
         if self.last_update.elapsed() >= self.update_interval {
-            self.system.refresh_all();
+            let pid: [sysinfo::Pid; 1] = [sysinfo::Pid::from_u32(std::process::id())];
+
+            // kinda expensive; (Debug build times)
+            // ~14ms with tasks,
+            // ~1ms without tasks,
+            // disabling the other options brings it down to ~890 us
+            // but its literally getting no information at that point
+            self.system.refresh_processes_specifics(
+                ProcessesToUpdate::Some(&pid),
+                false,
+                ProcessRefreshKind::everything().without_tasks(),
+            );
+
             self.last_update = Instant::now();
         }
 
