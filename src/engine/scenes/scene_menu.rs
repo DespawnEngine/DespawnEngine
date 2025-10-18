@@ -1,5 +1,8 @@
+use vulkano::command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer};
+use vulkano::memory::allocator::StandardMemoryAllocator;
+use vulkano::pipeline::graphics::viewport::Viewport;
 use crate::engine::scenes::handling::scene_manager::SceneManager;
-use crate::engine::scenes::handling::scene_trait::Scene;
+use crate::engine::scenes::handling::scene_trait::{Scene, SceneResources};
 use crate::engine::scenes::handling::scene_types::SceneType;
 use crate::engine::core::input::InputState;
 use crate::engine::rendering::camera::Camera;
@@ -27,7 +30,13 @@ impl Scene for MenuScene
 
     }
 
-    fn draw(&self) {
+    fn draw(
+        &self,
+        _builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
+        _viewport: &Viewport,
+        _allocator: &StandardMemoryAllocator,
+        _resources: &SceneResources,
+    ) {
         //println!("Drawing Menu Scene");
     }
 }

@@ -1,6 +1,7 @@
 mod arguments;
 mod engine;
 mod utils;
+mod content;
 
 use engine::core::app::App;
 use winit::event_loop::{ControlFlow, EventLoop, EventLoopBuilder};

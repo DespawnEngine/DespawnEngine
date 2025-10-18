@@ -5,8 +5,17 @@ use vulkano::descriptor_set::DescriptorSet;
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::descriptor_set::layout::DescriptorSetLayout;
 use std::sync::Arc;
+use vulkano::command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer};
 use vulkano::image::sampler::Sampler;
 use vulkano::image::view::ImageView;
+use vulkano::pipeline::graphics::viewport::Viewport;
+use vulkano::pipeline::GraphicsPipeline;
+
+#[derive(Clone)]
+pub struct SceneResources {
+    pub memory_allocator: Arc<StandardMemoryAllocator>,
+    pub default_pipeline: Arc<GraphicsPipeline>,
+}
 
 pub trait Scene: Send {
     fn awake(&mut self) {
@@ -29,10 +38,14 @@ pub trait Scene: Send {
         // Runs after update. Good for things like camera follow logic, etc.
     }
 
-    fn draw(&self)
-    {
+    fn draw(
+        &self,
+        builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
+        viewport: &Viewport,
+        allocator: &StandardMemoryAllocator,
+        resources: &SceneResources,
         // Runs after Update, Fixed Update, and Late Update.
-    }
+    );
 
     fn create_mvp_descriptor_set(&self,
         _memory_allocator: &Arc<StandardMemoryAllocator>,
@@ -44,4 +57,6 @@ pub trait Scene: Send {
     ) -> Option<Arc<DescriptorSet>> {
         None
     }
+
+    fn inject_resources(&mut self, _resources: &SceneResources) {}
 }

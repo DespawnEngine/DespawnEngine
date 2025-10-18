@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex, OnceLock};
-use crate::engine::scenes::handling::scene_trait::Scene;
+use vulkano::command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer};
+use crate::engine::scenes::handling::scene_trait::{Scene, SceneResources};
 use crate::engine::scenes::handling::scene_types::SceneType;
 use crate::engine::scenes::scene_game::GameScene;
 use crate::engine::scenes::scene_menu::MenuScene;
@@ -11,6 +12,7 @@ use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::descriptor_set::layout::DescriptorSetLayout;
 use vulkano::image::sampler::Sampler;
 use vulkano::image::view::ImageView;
+use vulkano::pipeline::graphics::viewport::Viewport;
 
 #[derive(Clone)]
 pub struct SceneManager
@@ -18,6 +20,7 @@ pub struct SceneManager
     scenes: Arc<Mutex<Vec<(SceneType, Box<dyn Scene + Send>)>>>,
     current_scene: Arc<Mutex<Option<SceneType>>>,
     next_scene: Arc<Mutex<Option<SceneType>>>,
+    scene_resources: Arc<Mutex<Option<SceneResources>>>,
 }
 
 impl SceneManager
@@ -25,13 +28,14 @@ impl SceneManager
     pub fn new() -> Self {
         let scenes = vec![
             (SceneType::Menu, Box::new(MenuScene) as Box<dyn Scene + Send>),
-            (SceneType::Game, Box::new(GameScene) as Box<dyn Scene + Send>),
+            (SceneType::Game, Box::new(GameScene::new()) as Box<dyn Scene + Send>),
         ];
 
         SceneManager {
             scenes: Arc::new(Mutex::new(scenes)),
             current_scene: Arc::new(Mutex::new(Some(SceneType::Menu))),
             next_scene: Arc::new(Mutex::new(None)),
+            scene_resources: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -39,6 +43,14 @@ impl SceneManager
     {
         static INSTANCE: OnceLock<SceneManager> = OnceLock::new();
         INSTANCE.get_or_init(SceneManager::new).clone()
+    }
+
+    pub fn set_scene_resources(&self, resources: SceneResources) {
+        *self.scene_resources.lock().unwrap() = Some(resources);
+    }
+
+    fn scene_resources(&self) -> Option<SceneResources> {
+        self.scene_resources.lock().unwrap().clone()
     }
 
     pub fn switch_scene(&self, scene_type: SceneType)
@@ -50,6 +62,10 @@ impl SceneManager
         let mut scenes = self.scenes.lock().unwrap();
         if let Some((_, scene)) = scenes.iter_mut().find(|(st, _)| *st == scene_type)
         {
+            if let Some(resources) = self.scene_resources() {
+                scene.inject_resources(&resources);
+            }
+
             scene.awake();
             scene.start();
         }
@@ -138,9 +154,19 @@ impl SceneManager
         self.with_current_scene_mut_with_params(delta_time, input_state, camera, |scene, dt, input, cam| scene.late_update(dt, input, cam));
     }
 
-    pub fn draw(&self)
-    {
-        self.with_current_scene(|scene| scene.draw());
+    pub fn draw(
+        &self,
+        builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer>,
+        viewport: &Viewport,
+        allocator: &StandardMemoryAllocator,
+    ) {
+        // Lock the resources
+        let resources = self.scene_resources.lock().unwrap();
+        if let Some(res) = &*resources {
+            self.with_current_scene(|scene| {
+                scene.draw(builder, viewport, allocator, res);
+            });
+        }
     }
 
     pub fn create_mvp_descriptor_set(&self,
@@ -159,5 +185,12 @@ impl SceneManager
             }
         }
         None
+    }
+
+    pub fn inject_resources_to_all(&self, resources: &SceneResources) {
+        let mut scenes = self.scenes.lock().unwrap();
+        for (_, scene) in scenes.iter_mut() {
+            scene.inject_resources(resources);
+        }
     }
 }

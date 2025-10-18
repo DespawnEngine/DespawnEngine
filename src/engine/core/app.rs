@@ -1,7 +1,7 @@
+use vulkano::image::{sampler, ImageType};
 use std::ops::Not;
 use std::sync::Arc;
 use std::time::{self, Instant};
-use vulkano::image::{ImageType, sampler};
 
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
 use vulkano::descriptor_set::DescriptorSet;
@@ -65,6 +65,11 @@ use vulkano::image::ImageCreateInfo;
 use vulkano::image::ImageUsage;
 use vulkano::image::sampler::{Filter, Sampler, SamplerCreateInfo};
 use vulkano::image::view::ImageView;
+use crate::utils::registry::Registry;
+use crate::content::block::block::Block;
+use crate::engine::core::content_loader::GameContent;
+use crate::engine::resources::load_json5_dir;
+use crate::engine::scenes::handling::scene_trait::SceneResources;
 
 //
 // `App` holds the state of the application, including all Vulkan objects that need to persist between frames.
@@ -96,6 +101,7 @@ pub struct App {
     scene_manager: Option<SceneManager>, // MAIN GAME SCENE MANAGER
     texture: Option<Arc<vulkano::image::view::ImageView>>,
     sampler: Option<Arc<vulkano::image::sampler::Sampler>>,
+    pub content: Option<Arc<GameContent>>,
 }
 
 impl Default for App {
@@ -132,6 +138,7 @@ impl Default for App {
             scene_manager: None, // MAIN GAME SCENE MANAGER
             sampler: None,
             texture: None,
+            content: None,
         }
     }
 }
@@ -177,12 +184,28 @@ impl App {
         let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
         self.memory_allocator = Some(memory_allocator.clone());
 
-        let tex_bytes = include_bytes!("../../../assets/texture.png");
-        let img = ImageReader::new(Cursor::new(tex_bytes))
-            .with_guessed_format()
-            .unwrap()
-            .decode()
-            .unwrap()
+        // Load game content (from JSON files)
+        self.load_game_content();
+
+        // Determine texture path from the temporary test block (fallback to default texture)
+        let texture_path = self
+            .content
+            .as_ref()
+            .and_then(|gc| gc.blocks.get("template:engine").map(|b| b.texture.clone()))
+            .map(|p| {
+                let path = std::path::Path::new(&p);
+                if path.is_absolute() {
+                    p // already absolute
+                } else {
+                    // "textures/blocks/dirt.png" ->> "assets/textures/blocks/dirt.png"
+                    format!("assets/{}", p.trim_start_matches(std::path::MAIN_SEPARATOR))
+                }
+            })
+            .unwrap_or_else(|| "assets/texture.png".to_string());
+
+        // Load the image from the path specified in the JSON for the temporary test block.
+        let img = image::open(&texture_path)
+            .unwrap_or_else(|e| panic!("Failed to open texture '{}': {e}", texture_path))
             .into_rgba8();
 
         let (width, height) = img.dimensions();
@@ -202,8 +225,7 @@ impl App {
                 memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
                 ..Default::default()
             },
-        )
-        .unwrap();
+        ).unwrap();
 
         // Upload pixels via a staging buffer
         let staging_buffer = Buffer::from_iter(
@@ -218,22 +240,19 @@ impl App {
                 ..Default::default()
             },
             img_data,
-        )
-        .unwrap();
+        ).unwrap();
 
         let mut builder = AutoCommandBufferBuilder::primary(
             self.command_buffer_allocator.as_ref().unwrap().clone(),
             queue.queue_family_index(),
             CommandBufferUsage::OneTimeSubmit,
-        )
-        .unwrap();
+        ).unwrap();
 
         builder
             .copy_buffer_to_image(CopyBufferToImageInfo::buffer_image(
                 staging_buffer,
                 texture_image.clone(),
-            ))
-            .unwrap();
+            )).unwrap();
 
         let command_buffer = builder.build().unwrap();
         let future = sync::now(device.clone())
@@ -252,8 +271,7 @@ impl App {
                 min_filter: Filter::Nearest,
                 ..Default::default()
             },
-        )
-        .unwrap();
+        ).unwrap();
 
         self.texture = Some(texture);
         self.sampler = Some(sampler);
@@ -275,8 +293,7 @@ impl App {
                 ..Default::default()
             },
             MVP::default(),
-        )
-        .unwrap();
+        ).unwrap();
         self.mvp_buffer = Some(mvp_buffer); // Temp store if needed later
 
         let framebuffers = window_size_dependent_setup(
@@ -297,12 +314,6 @@ impl App {
         self.recreate_swapchain = false;
         self.previous_frame_end = Some(sync::now(device.clone()).boxed());
         self.input_state = Some(InputState::default());
-
-        // Create the SceneManager and call Awake/Start
-        let scene_manager = SceneManager::instance();
-        scene_manager.awake();
-        scene_manager.start();
-        self.scene_manager = Some(scene_manager);
 
         // UserSettings is a singleton in order for easy access anywhere and hot reloading
         self.user_settigns = Some(UserSettings::instance());
@@ -422,6 +433,17 @@ impl App {
         self.descriptor_set_allocator = Some(descriptor_set_allocator);
         self.descriptor_set = Some(set);
     }
+    fn load_game_content(&mut self) {
+        // Load the game content
+        let content = GameContent::load_all();
+        let content_arc = Arc::new(content);
+
+        // Initialize the OnceLock singleton
+        GameContent::init(content_arc.clone());
+
+        // Store locally as well
+        self.content = Some(content_arc);
+    }
 }
 
 impl ApplicationHandler for App {
@@ -430,6 +452,17 @@ impl ApplicationHandler for App {
         self.create_window(event_loop);
         self.create_vulkan(event_loop);
         self.create_pipeline();
+
+        // Create the SceneManager and call Awake/Start
+        let scene_manager = SceneManager::instance();
+        let resources = SceneResources {
+            memory_allocator: self.memory_allocator.as_ref().unwrap().clone(),
+            default_pipeline: self.pipeline.as_ref().unwrap().clone(),
+        };
+        scene_manager.set_scene_resources(resources);
+        scene_manager.awake();
+        scene_manager.start();
+        self.scene_manager = Some(scene_manager);
     }
 
     fn device_event(
@@ -678,11 +711,6 @@ impl ApplicationHandler for App {
                 // Build the command buffer for this frame's drawing commands.
                 let image_extent: [u32; 2] = window.inner_size().into(); // Image extent
 
-                // Do scene manager lifecycle draw
-                if let Some(scene_manager) = &self.scene_manager {
-                    scene_manager.draw();
-                }
-
                 // START BUILDING BUFFERS
                 let mut cmd_buffer_builder = AutoCommandBufferBuilder::primary(
                     command_buffer_allocator.clone(),
@@ -725,6 +753,13 @@ impl ApplicationHandler for App {
                     cmd_buffer_builder
                         .draw(self.vertex_buffer.as_ref().unwrap().len() as u32, 1, 0, 0)
                         .unwrap();
+                }
+
+                // Do scene manager lifecycle draw
+                if let (Some(scene_manager), Some(memory_allocator)) =
+                    (&self.scene_manager, &self.memory_allocator)
+                {
+                    scene_manager.draw(&mut cmd_buffer_builder, &self.viewport, memory_allocator);
                 }
 
                 cmd_buffer_builder
