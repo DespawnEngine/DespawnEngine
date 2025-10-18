@@ -18,6 +18,7 @@ pub struct EguiStruct {
     queue: Arc<Queue>, // For GPU info
     last_update: Instant,
     update_interval: Duration, // frequently to update the UI window
+    delta_time: Duration,
     debug_ui: DebugUi,
 }
 
@@ -50,11 +51,14 @@ impl EguiStruct {
             queue,
             last_update: Instant::now(),
             update_interval: Duration::from_secs_f64(0.5),
+
+            delta_time: Duration::new(1, 0),
             debug_ui,
         }
     }
 
-    pub fn update(&mut self, event: &WindowEvent) {
+    pub fn update(&mut self, event: &WindowEvent, dt: Duration) {
+        self.delta_time = dt;
         self.gui.update(event);
     }
 
@@ -78,7 +82,7 @@ impl EguiStruct {
 
         self.gui.immediate_ui(|gui| {
             let ctx = gui.context();
-            self.debug_ui.render(&ctx, &self.system);
+            self.debug_ui.render(&ctx, &self.system, self.delta_time);
         });
     }
 
