@@ -1,5 +1,5 @@
 {
   id: "template:dirt",
   name: "Dirt Block",
-  texture: "textures/dirt.png",
+  texture: "textures/blocks/dirt.png",
 }

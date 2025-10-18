@@ -1,5 +1,5 @@
 {
   id: "template:engine",
   name: "Engine Block",
-  texture: "textures/engine.png",
+  texture: "textures/blocks/engine.png",
 }

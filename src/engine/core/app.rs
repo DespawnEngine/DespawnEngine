@@ -182,10 +182,28 @@ impl App {
         let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
         self.memory_allocator = Some(memory_allocator.clone());
 
-        let tex_bytes = include_bytes!("../../../assets/texture.png");
-        let img = ImageReader::new(Cursor::new(tex_bytes))
-            .with_guessed_format().unwrap()
-            .decode().unwrap()
+        // Load game content (from JSON files)
+        self.load_game_content();
+
+        // Determine texture path from the temporary test block (fallback to default texture)
+        let texture_path = self
+            .content
+            .as_ref()
+            .and_then(|gc| gc.blocks.get("template:dirt").map(|b| b.texture.clone()))
+            .map(|p| {
+                let path = std::path::Path::new(&p);
+                if path.is_absolute() {
+                    p // already absolute
+                } else {
+                    // "textures/blocks/dirt.png" ->> "assets/textures/blocks/dirt.png"
+                    format!("assets/{}", p.trim_start_matches(std::path::MAIN_SEPARATOR))
+                }
+            })
+            .unwrap_or_else(|| "assets/texture.png".to_string());
+
+        // Load the image from the path specified in the JSON for the temporary test block.
+        let img = image::open(&texture_path)
+            .unwrap_or_else(|e| panic!("Failed to open texture '{}': {e}", texture_path))
             .into_rgba8();
 
         let (width, height) = img.dimensions();
@@ -232,8 +250,7 @@ impl App {
             .copy_buffer_to_image(CopyBufferToImageInfo::buffer_image(
                 staging_buffer,
                 texture_image.clone(),
-            ))
-            .unwrap();
+            )).unwrap();
 
         let command_buffer = builder.build().unwrap();
         let future = sync::now(device.clone())
@@ -272,8 +289,7 @@ impl App {
                 ..Default::default()
             },
             MVP::default(),
-        )
-        .unwrap();
+        ).unwrap();
         self.mvp_buffer = Some(mvp_buffer); // Temp store if needed later
 
         let framebuffers = window_size_dependent_setup(
@@ -300,9 +316,6 @@ impl App {
         scene_manager.awake();
         scene_manager.start();
         self.scene_manager = Some(scene_manager);
-
-        // Load game assets
-        self.load_game_content();
 
         // UserSettings is a singleton in order for easy access anywhere and hot reloading
         self.user_settigns = Some(UserSettings::instance());
@@ -369,7 +382,10 @@ impl App {
                         viewports: [viewport].into_iter().collect(),
                         ..Default::default()
                     }),
-                    rasterization_state: Some(RasterizationState::default()),
+                    rasterization_state: Some(RasterizationState {
+                        cull_mode: vulkano::pipeline::graphics::rasterization::CullMode::Back,
+                        ..Default::default()
+                    }),
                     multisample_state: Some(MultisampleState::default()),
                     color_blend_state: Some(ColorBlendState::with_attachment_states(
                         subpass.num_color_attachments(),
