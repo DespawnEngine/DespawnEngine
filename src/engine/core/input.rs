@@ -4,6 +4,8 @@ use fixedstr::zstr;
 use winit::event::{ElementState, WindowEvent};
 use winit::keyboard::{KeyCode, PhysicalKey};
 
+use crate::engine::core::user_settings::UserSettings;
+
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub enum KeyState {
     #[default]
@@ -115,8 +117,8 @@ impl InputState {
     }
 
     pub fn update_mouse(&mut self, delta: (f64, f64)) {
-        self.mouse_delta_x = delta.0 as f32;
-        self.mouse_delta_y = delta.1 as f32;
+        self.mouse_delta_x = delta.0 as f32 * UserSettings::instance().mouse_sensitivity;
+        self.mouse_delta_y = delta.1 as f32 * UserSettings::instance().mouse_sensitivity;
     }
 }
 

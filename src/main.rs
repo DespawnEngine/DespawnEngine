@@ -3,9 +3,7 @@ mod engine;
 mod utils;
 
 use engine::core::app::App;
-use winit::{
-    event_loop::{ControlFlow, EventLoop, EventLoopBuilder},
-};
+use winit::event_loop::{ControlFlow, EventLoop, EventLoopBuilder};
 
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly"))]
 use winit::platform::{wayland::EventLoopBuilderExtWayland, x11::EventLoopBuilderExtX11};
