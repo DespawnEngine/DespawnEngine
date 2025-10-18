@@ -64,6 +64,10 @@ use vulkano::format::Format;
 use image::io::Reader as ImageReader;
 use std::io::Cursor;
 use vulkano::command_buffer::CopyBufferToImageInfo;
+use crate::utils::registry::Registry;
+use crate::content::block::block::Block;
+use crate::engine::core::content_loader::GameContent;
+use crate::engine::resources::load_json5_dir;
 
 //
 // `App` holds the state of the application, including all Vulkan objects that need to persist between frames.
@@ -95,6 +99,7 @@ pub struct App {
     scene_manager: Option<SceneManager>, // MAIN GAME SCENE MANAGER
     texture: Option<Arc<vulkano::image::view::ImageView>>,
     sampler: Option<Arc<vulkano::image::sampler::Sampler>>,
+    content: Option<GameContent>,
 }
 
 impl Default for App {
@@ -131,6 +136,7 @@ impl Default for App {
             scene_manager: None, // MAIN GAME SCENE MANAGER
             sampler: None,
             texture: None,
+            content: None,
         }
     }
 }
@@ -295,6 +301,9 @@ impl App {
         scene_manager.start();
         self.scene_manager = Some(scene_manager);
 
+        // Load game assets
+        self.load_game_content();
+
         // UserSettings is a singleton in order for easy access anywhere and hot reloading
         self.user_settigns = Some(UserSettings::instance());
     }
@@ -398,6 +407,9 @@ impl App {
 
         self.descriptor_set_allocator = Some(descriptor_set_allocator);
         self.descriptor_set = Some(set);
+    }
+    fn load_game_content(&mut self) {
+        self.content = Some(GameContent::load_all());
     }
 }
 
