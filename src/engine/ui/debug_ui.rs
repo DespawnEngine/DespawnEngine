@@ -1,5 +1,7 @@
-use egui::{self, Context, RichText, FontDefinitions, ProgressBar};
-use egui_plot::{uniform_grid_spacer, Line, Plot, PlotPoints};
+use egui::{
+    self, Context, FontData, FontDefinitions, FontFamily, FontTweak, ProgressBar, RichText,
+};
+use egui_plot::{Line, Plot, PlotPoints, uniform_grid_spacer};
 use std::{collections::VecDeque, sync::Arc};
 use sysinfo::{Process, System};
 use vulkano::device::Queue;
@@ -11,20 +13,39 @@ const AMOUNT_OF_STATS_SAVED: u64 = 1024;
 
 pub struct DebugUi {
     pub queue: Arc<Queue>,
+    fonts: FontDefinitions,
     mem_usage_stats: VecDeque<Option<MemoryUsageBytes>>,
     cpu_usage_stats: VecDeque<Option<CpuUsagePercent>>,
 }
 
 impl DebugUi {
     pub fn new(queue: Arc<Queue>) -> Self {
-        let mut mem_usage: VecDeque<Option<MemoryUsageBytes>> = VecDeque::with_capacity(AMOUNT_OF_STATS_SAVED as usize);
+        let mut mem_usage: VecDeque<Option<MemoryUsageBytes>> =
+            VecDeque::with_capacity(AMOUNT_OF_STATS_SAVED as usize);
         mem_usage.resize_with(AMOUNT_OF_STATS_SAVED as usize, || None);
 
-        let mut cpu_usage: VecDeque<Option<CpuUsagePercent>> = VecDeque::with_capacity(AMOUNT_OF_STATS_SAVED as usize);
+        let mut cpu_usage: VecDeque<Option<CpuUsagePercent>> =
+            VecDeque::with_capacity(AMOUNT_OF_STATS_SAVED as usize);
         cpu_usage.resize_with(AMOUNT_OF_STATS_SAVED as usize, || None);
+
+        let mut fonts = FontDefinitions::default();
+
+        fonts.font_data.insert(
+            "default".into(),
+            Arc::new(FontData::from_static(include_bytes!(
+                "../../../assets/fonts/default.ttf"
+            ))),
+        );
+
+        fonts
+            .families
+            .get_mut(&FontFamily::Proportional)
+            .unwrap()
+            .insert(0, "default".to_owned());
 
         DebugUi {
             queue,
+            fonts,
             mem_usage_stats: mem_usage,
             cpu_usage_stats: cpu_usage,
         }
@@ -32,7 +53,7 @@ impl DebugUi {
 
     // has an implicit lifetime due to using a System ref. Doesn't do much though.
     pub fn render(&mut self, ctx: &Context, system: &System) {
-        ctx.set_fonts(FontDefinitions::default());
+        ctx.set_fonts(self.fonts.clone());
 
         egui::Window::new("Despawn Debugger")
             .resizable(true)
@@ -48,7 +69,7 @@ impl DebugUi {
 
                 self.update_cpu_usage(proc);
 
-                egui::CollapsingHeader::new("CPU")
+                let trol = egui::CollapsingHeader::new("CPU")
                     .default_open(false)
                     .show(ui, |ui| {
                         let cpu = system
@@ -78,7 +99,13 @@ impl DebugUi {
                             .allow_drag(false)
                             .allow_boxed_zoom(false)
                             .allow_double_click_reset(false)
-                            .x_grid_spacer(uniform_grid_spacer(|_| [AMOUNT_OF_STATS_SAVED as f64 / 16.0, AMOUNT_OF_STATS_SAVED as f64 / 4.0, AMOUNT_OF_STATS_SAVED as f64 / 2.0]))
+                            .x_grid_spacer(uniform_grid_spacer(|_| {
+                                [
+                                    AMOUNT_OF_STATS_SAVED as f64 / 16.0,
+                                    AMOUNT_OF_STATS_SAVED as f64 / 4.0,
+                                    AMOUNT_OF_STATS_SAVED as f64 / 2.0,
+                                ]
+                            }))
                             .default_y_bounds(0.0, 100.0)
                             .default_x_bounds(0.0, AMOUNT_OF_STATS_SAVED as f64)
                             .show(ui, |plot_ui| {
@@ -120,7 +147,13 @@ impl DebugUi {
                             .allow_drag(false)
                             .allow_boxed_zoom(false)
                             .allow_double_click_reset(false)
-                            .x_grid_spacer(uniform_grid_spacer(|_| [AMOUNT_OF_STATS_SAVED as f64 / 16.0, AMOUNT_OF_STATS_SAVED as f64 / 4.0, AMOUNT_OF_STATS_SAVED as f64 / 2.0]))
+                            .x_grid_spacer(uniform_grid_spacer(|_| {
+                                [
+                                    AMOUNT_OF_STATS_SAVED as f64 / 16.0,
+                                    AMOUNT_OF_STATS_SAVED as f64 / 4.0,
+                                    AMOUNT_OF_STATS_SAVED as f64 / 2.0,
+                                ]
+                            }))
                             .default_y_bounds(0.0, 100.0)
                             .default_x_bounds(0.0, AMOUNT_OF_STATS_SAVED as f64)
                             .show(ui, |plot_ui| {
