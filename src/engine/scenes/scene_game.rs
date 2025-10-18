@@ -11,6 +11,8 @@ use vulkano::descriptor_set::{DescriptorSet, WriteDescriptorSet};
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::descriptor_set::layout::DescriptorSetLayout;
 use std::sync::Arc;
+use vulkano::image::sampler::Sampler;
+use vulkano::image::view::ImageView;
 
 pub struct GameScene;
 
@@ -30,12 +32,14 @@ impl Scene for GameScene {
     fn draw(&self) {}
 
     fn create_mvp_descriptor_set(&self,
-                                 memory_allocator: &Arc<StandardMemoryAllocator>,
-                                 descriptor_set_allocator: &Arc<StandardDescriptorSetAllocator>,
-                                 layout: &Arc<DescriptorSetLayout>,
-                                 camera: &Camera
+        memory_allocator: &Arc<StandardMemoryAllocator>,
+        descriptor_set_allocator: &Arc<StandardDescriptorSetAllocator>,
+        layout: &Arc<DescriptorSetLayout>,
+        camera: &Camera,
+        texture_view: &Arc<ImageView>,
+        sampler: &Arc<Sampler>,
     ) -> Option<Arc<DescriptorSet>> {
-        make_mvp_descriptor_set(memory_allocator, descriptor_set_allocator, layout, camera)
+        make_mvp_descriptor_set(memory_allocator, descriptor_set_allocator, layout, camera, texture_view, sampler)
     }
 }
 
