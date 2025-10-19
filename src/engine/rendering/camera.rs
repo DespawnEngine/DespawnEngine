@@ -96,8 +96,8 @@ impl Camera {
         }
 
         // Mouse rotation
-        let new_yaw = self.yaw() + (input.mouse_delta_x * self.sensitivity);
-        let new_pitch = (self.pitch() + (input.mouse_delta_y * self.sensitivity))
+        let new_yaw = self.yaw() + (input.mouse_delta_x * self.sensitivity * delta_time);
+        let new_pitch = (self.pitch() + (input.mouse_delta_y * self.sensitivity * delta_time))
             .clamp(-MAX_PITCH_DEG, MAX_PITCH_DEG);
 
         self.rotation_quat = Quat::from_euler(
