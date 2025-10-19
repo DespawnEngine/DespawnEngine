@@ -1,7 +1,7 @@
-use vulkano::image::{sampler, ImageType};
 use std::ops::Not;
 use std::sync::Arc;
 use std::time::{self, Instant};
+use vulkano::image::{ImageType, sampler};
 
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
 use vulkano::descriptor_set::DescriptorSet;
@@ -47,7 +47,7 @@ use winit::{
 use crate::engine::core::input::{InputState, KeyBind};
 use crate::engine::core::user_settings::UserSettings;
 use crate::engine::rendering::mvp::MVP;
-use crate::engine::rendering::vertex::MyVertex;
+use crate::engine::rendering::vertex::BlockVertex;
 use crate::engine::rendering::vswapchain::{create_swapchain, window_size_dependent_setup};
 use crate::engine::rendering::vulkan::{create_device_and_queue, create_instance};
 use crate::engine::rendering::{
@@ -57,6 +57,11 @@ use crate::engine::rendering::{
 use crate::engine::scenes::handling::scene_manager::SceneManager;
 use crate::engine::ui::egui_integration::EguiStruct;
 
+use crate::content::block::block::Block;
+use crate::engine::core::content_loader::GameContent;
+use crate::engine::resources::load_json5_dir;
+use crate::engine::scenes::handling::scene_trait::SceneResources;
+use crate::utils::registry::Registry;
 use image::io::Reader as ImageReader;
 use std::io::Cursor;
 use vulkano::command_buffer::CopyBufferToImageInfo;
@@ -65,11 +70,6 @@ use vulkano::image::ImageCreateInfo;
 use vulkano::image::ImageUsage;
 use vulkano::image::sampler::{Filter, Sampler, SamplerCreateInfo};
 use vulkano::image::view::ImageView;
-use crate::utils::registry::Registry;
-use crate::content::block::block::Block;
-use crate::engine::core::content_loader::GameContent;
-use crate::engine::resources::load_json5_dir;
-use crate::engine::scenes::handling::scene_trait::SceneResources;
 
 //
 // `App` holds the state of the application, including all Vulkan objects that need to persist between frames.
@@ -86,7 +86,7 @@ pub struct App {
     recreate_swapchain: bool,
     previous_frame_end: Option<Box<dyn GpuFuture>>,
     command_buffer_allocator: Option<Arc<StandardCommandBufferAllocator>>,
-    vertex_buffer: Option<Subbuffer<[MyVertex]>>,
+    vertex_buffer: Option<Subbuffer<[BlockVertex]>>,
     pipeline: Option<Arc<GraphicsPipeline>>,
     egui: Option<EguiStruct>,
     mvp_buffer: Option<Subbuffer<MVP>>,
@@ -225,7 +225,8 @@ impl App {
                 memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
                 ..Default::default()
             },
-        ).unwrap();
+        )
+        .unwrap();
 
         // Upload pixels via a staging buffer
         let staging_buffer = Buffer::from_iter(
@@ -240,19 +241,22 @@ impl App {
                 ..Default::default()
             },
             img_data,
-        ).unwrap();
+        )
+        .unwrap();
 
         let mut builder = AutoCommandBufferBuilder::primary(
             self.command_buffer_allocator.as_ref().unwrap().clone(),
             queue.queue_family_index(),
             CommandBufferUsage::OneTimeSubmit,
-        ).unwrap();
+        )
+        .unwrap();
 
         builder
             .copy_buffer_to_image(CopyBufferToImageInfo::buffer_image(
                 staging_buffer,
                 texture_image.clone(),
-            )).unwrap();
+            ))
+            .unwrap();
 
         let command_buffer = builder.build().unwrap();
         let future = sync::now(device.clone())
@@ -271,7 +275,8 @@ impl App {
                 min_filter: Filter::Nearest,
                 ..Default::default()
             },
-        ).unwrap();
+        )
+        .unwrap();
 
         self.texture = Some(texture);
         self.sampler = Some(sampler);
@@ -293,7 +298,8 @@ impl App {
                 ..Default::default()
             },
             MVP::default(),
-        ).unwrap();
+        )
+        .unwrap();
         self.mvp_buffer = Some(mvp_buffer); // Temp store if needed later
 
         let framebuffers = window_size_dependent_setup(
@@ -351,7 +357,7 @@ impl App {
             let vs_entry = vs.entry_point("main").unwrap();
             let fs_entry = fs.entry_point("main").unwrap();
 
-            let vertex_input_state = MyVertex::per_vertex().definition(&vs_entry).unwrap();
+            let vertex_input_state = BlockVertex::per_vertex().definition(&vs_entry).unwrap();
 
             let stages = [
                 PipelineShaderStageCreateInfo::new(vs_entry),
@@ -494,6 +500,7 @@ impl ApplicationHandler for App {
         egui.update(
             &event,
             self.last_frame_time.unwrap_or(Instant::now()).elapsed(),
+            self.camera.unwrap().position.into(),
         );
 
         self.input_state

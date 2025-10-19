@@ -48,7 +48,7 @@ impl UserSettings {
                 println!(
                     "failed to parse mouse_sensitivity from settings file {used_settings_file_path:?}"
                 );
-                1.0
+                DEFAULT_MOUSE_SENSITIVITY
             });
 
         UserSettings { mouse_sensitivity }

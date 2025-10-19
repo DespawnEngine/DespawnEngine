@@ -1,10 +1,12 @@
 use std::sync::Arc;
-use vulkano::buffer::{Subbuffer, BufferCreateInfo, BufferUsage, Buffer};
-use vulkano::memory::allocator::{StandardMemoryAllocator, AllocationCreateInfo, MemoryTypeFilter};
+use std::time::Instant;
+use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer};
+use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
 
-use crate::engine::rendering::vertex::MyVertex;
+use crate::content::block::block::Block;
+use crate::content::world::chunks::chunk::{CHUNK_SIZE, Chunk, MAX_CHUNK_INDEX};
 use crate::engine::rendering::cube;
-use crate::content::world::chunks::chunk::{Chunk, CHUNK_SIZE};
+use crate::engine::rendering::vertex::BlockVertex;
 use crate::utils::math::Vec3;
 
 /// Builds chunk mesh by adding one cube for each non-air block.
@@ -12,37 +14,67 @@ use crate::utils::math::Vec3;
 pub fn build_chunk_mesh(
     allocator: Arc<StandardMemoryAllocator>,
     chunk: &Chunk,
-) -> Subbuffer<[MyVertex]> {
-    let mut vertices: Vec<MyVertex> = Vec::new();
+) -> Subbuffer<[BlockVertex]> {
+    let start_build: Instant = Instant::now();
+    let mut vertices: Vec<BlockVertex> = Vec::new();
 
-    // Get a cube’s vertices (centered at origin)
-    let cube_vertices = cube::get_cube_vertices();
+    // + 1 because rust is weird
+    for idx in 0..MAX_CHUNK_INDEX + 1 {
+        let palette_idx = chunk.blocks[idx] as usize;
+        let block_id = &chunk.palette[palette_idx];
 
-    for x in 0..CHUNK_SIZE {
-        for y in 0..CHUNK_SIZE {
-            for z in 0..CHUNK_SIZE {
-                let idx = Chunk::index(x, y, z);
-                let palette_idx = chunk.blocks[idx] as usize;
-                let block_id = &chunk.palette[palette_idx];
+        if block_id.contains("air") {
+            continue;
+        }
 
-                // Ignore air blocks
-                if block_id.contains("air") {
-                    continue;
-                }
+        // deriving the coords instead of nested loops
+        let x: usize = idx % CHUNK_SIZE;
+        let y: usize = (idx % (CHUNK_SIZE * CHUNK_SIZE)).div_euclid(CHUNK_SIZE);
+        let z: usize = idx.div_euclid(CHUNK_SIZE * CHUNK_SIZE);
 
-                // Add cube vertices offset by block position
-                for v in &cube_vertices {
-                    let mut v = *v;
-                    v.position = Vec3::from([
-                        v.position[0] + x as f32,
-                        v.position[1] + y as f32,
-                        v.position[2] + z as f32,
-                    ]);
-                    vertices.push(v);
-                }
-            }
+        // if this ever fails, math has somehow broken.
+        debug_assert!(Chunk::index(x, y, z) == idx);
+
+        // conditionally adding vertices if they are on the edge or are next to air
+        if y == 15 || chunk.is_air_at_idx(idx + CHUNK_SIZE) {
+            vertices.append(&mut Vec::from(cube::TOP_FACE.map(|mut v| {
+                v.position += Vec3::from([x as f32, y as f32, z as f32]);
+                v
+            })));
+        }
+        if y == 0 || chunk.is_air_at_idx(idx - CHUNK_SIZE) {
+            vertices.append(&mut Vec::from(cube::BOTTOM_FACE.map(|mut v| {
+                v.position += Vec3::from([x as f32, y as f32, z as f32]);
+                v
+            })));
+        }
+        if z == 0 || chunk.is_air_at_idx(idx - (CHUNK_SIZE * CHUNK_SIZE)) {
+            vertices.append(&mut Vec::from(cube::REAR_FACE.map(|mut v| {
+                v.position += Vec3::from([x as f32, y as f32, z as f32]);
+                v
+            })));
+        }
+        if z == 15 || chunk.is_air_at_idx(idx + (CHUNK_SIZE * CHUNK_SIZE)) {
+            vertices.append(&mut Vec::from(cube::FRONT_FACE.map(|mut v| {
+                v.position += Vec3::from([x as f32, y as f32, z as f32]);
+                v
+            })));
+        }
+        if x == 0 || chunk.is_air_at_idx(idx - 1) {
+            vertices.append(&mut Vec::from(cube::RIGHT_FACE.map(|mut v| {
+                v.position += Vec3::from([x as f32, y as f32, z as f32]);
+                v
+            })));
+        }
+        if x == 15 || chunk.is_air_at_idx(idx + 1) {
+            vertices.append(&mut Vec::from(cube::LEFT_FACE.map(|mut v| {
+                v.position += Vec3::from([x as f32, y as f32, z as f32]);
+                v
+            })));
         }
     }
+
+    println!("it took {:?} to build the chunk", start_build.elapsed());
 
     Buffer::from_iter(
         allocator.clone(),
@@ -56,5 +88,6 @@ pub fn build_chunk_mesh(
             ..Default::default()
         },
         vertices,
-    ).unwrap()
+    )
+    .unwrap()
 }

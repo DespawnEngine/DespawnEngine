@@ -1,16 +1,19 @@
-use std::collections::HashMap;
 use crate::content::block::block::Block;
 use crate::engine::core::content_loader::GameContent;
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 
 /// Single chunk dimensions (16^3 because cubic)
 pub const CHUNK_SIZE: usize = 16;
 
+pub const MAX_CHUNK_INDEX: usize = 4095;
+
 #[derive(Clone)]
 pub struct Chunk {
     pub position: [i32; 3],
-    pub blocks: Vec<u16>, // block palette indices
-    pub palette: Vec<String>, // palette: index -> block ID
+    pub blocks: Vec<u16>,                  // block palette indices
+    pub palette: Vec<String>,              // palette: index -> block ID
     pub palette_map: HashMap<String, u16>, // block ID -> palette index
 }
 
@@ -24,6 +27,12 @@ impl Chunk {
         }
     }
 
+    pub fn is_air_at_idx(&self, idx: usize) -> bool {
+        let palette_idx = self.blocks[idx] as usize;
+        let block_id = &self.palette[palette_idx];
+        block_id.contains("air")
+    }
+
     #[inline(always)]
     pub(crate) fn index(x: usize, y: usize, z: usize) -> usize {
         x + y * CHUNK_SIZE + z * CHUNK_SIZE * CHUNK_SIZE
@@ -32,7 +41,6 @@ impl Chunk {
     /// Sets a block by ID (lookup in the palette)
     pub fn set_block(&mut self, x: usize, y: usize, z: usize, block_id: &str) {
         let idx = Self::index(x, y, z);
-
         let palette_idx = if let Some(&i) = self.palette_map.get(block_id) {
             i
         } else {
@@ -46,7 +54,13 @@ impl Chunk {
     }
 
     /// Gets a block from the registry with palette index
-    pub fn get_block<'a>(&self, x: usize, y: usize, z: usize, content: &'a GameContent) -> Option<Arc<Block>> {
+    pub fn get_block<'a>(
+        &self,
+        x: usize,
+        y: usize,
+        z: usize,
+        content: &'a GameContent,
+    ) -> Option<Arc<Block>> {
         let idx = Self::index(x, y, z);
         let palette_idx = self.blocks[idx] as usize;
         let block_id = self.palette.get(palette_idx)?;
@@ -57,11 +71,15 @@ impl Chunk {
     /// bottom half is dirt, top half is air
     pub fn generate_flat(&mut self, dirt_id: &str, content: &GameContent) {
         // Look up dirt and air blocks in the content registry
-        let dirt_block = content.blocks.get(dirt_id)
+        let dirt_block = content
+            .blocks
+            .get(dirt_id)
             .expect(&format!("Dirt block '{}' not found in registry", dirt_id));
 
         // Try to find a block marked as air in the registry
-        let air_block_id = content.blocks.iter()
+        let air_block_id = content
+            .blocks
+            .iter()
             .find(|(_, block)| block.is_air())
             .map(|(id, _)| id.clone())
             .unwrap_or_else(|| "template:air".to_string()); // fallback
@@ -87,7 +105,8 @@ impl Chunk {
             for z in 0..CHUNK_SIZE {
                 for x in 0..CHUNK_SIZE {
                     let palette_idx = self.blocks[Self::index(x, y, z)] as usize;
-                    let id_str = self.palette
+                    let id_str = self
+                        .palette
                         .get(palette_idx)
                         .cloned()
                         .unwrap_or_else(|| ".".to_string());

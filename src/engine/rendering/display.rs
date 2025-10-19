@@ -1,5 +1,5 @@
 use crate::arguments;
-use crate::engine::rendering::vertex::MyVertex;
+use crate::engine::rendering::vertex::BlockVertex;
 use image::GenericImageView;
 use std::sync::Arc;
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer};
@@ -59,7 +59,7 @@ pub fn create_render_pass(device: Arc<Device>) -> Arc<RenderPass> {
 }
 
 // Cube module //TODO: This shouldn't be needed like this. Remove later and make chunk mesh create its own.
-pub fn create_vertex_buffer(allocator: Arc<StandardMemoryAllocator>) -> Subbuffer<[MyVertex]> {
+pub fn create_vertex_buffer(allocator: Arc<StandardMemoryAllocator>) -> Subbuffer<[BlockVertex]> {
     crate::engine::rendering::cube::create_cube_vertex_buffer(allocator)
 }
 

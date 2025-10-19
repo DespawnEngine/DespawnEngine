@@ -1,5 +1,6 @@
 use crate::engine::rendering::vswapchain::IMAGE_FORMAT;
 use crate::engine::ui::debug_ui::DebugUi;
+use crate::utils::math::Vec3;
 use egui_winit_vulkano::{Gui, GuiConfig};
 
 use std::sync::Arc;
@@ -20,6 +21,7 @@ pub struct EguiStruct {
     update_interval: Duration, // frequently to update the UI window
     delta_time: Duration,
     debug_ui: DebugUi,
+    position: Option<Vec3>,
 }
 
 impl EguiStruct {
@@ -54,12 +56,14 @@ impl EguiStruct {
 
             delta_time: Duration::new(1, 0),
             debug_ui,
+            position: None,
         }
     }
 
-    pub fn update(&mut self, event: &WindowEvent, dt: Duration) {
+    pub fn update(&mut self, event: &WindowEvent, dt: Duration, position: Vec3) {
         self.delta_time = dt;
         self.gui.update(event);
+        self.position = Some(position);
     }
 
     pub fn redraw(&mut self) {
@@ -82,7 +86,8 @@ impl EguiStruct {
 
         self.gui.immediate_ui(|gui| {
             let ctx = gui.context();
-            self.debug_ui.render(&ctx, &self.system, self.delta_time);
+            self.debug_ui
+                .render(&ctx, &self.system, self.delta_time, self.position);
         });
     }
 
