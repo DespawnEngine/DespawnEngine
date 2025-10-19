@@ -7,7 +7,7 @@ use vulkano::image::view::ImageView;
 use vulkano::memory::allocator::{StandardMemoryAllocator, AllocationCreateInfo, MemoryTypeFilter};
 use vulkano::format::Format;
 
-use crate::content::block::block::Block;
+use crate::content::block::block::{Block, BlockModel};
 use crate::engine::core::content_loader::GameContent;
 
 /// UV mapping for one block in the atlas
@@ -35,25 +35,38 @@ impl TextureAtlas {
 
         // Get block textures
         let blocks: Vec<&Block> = content.blocks.iter().map(|(_, b)| b.as_ref()).collect();
-        let count = blocks.len();
-        assert!(count > 0, "No block textures found.");
+        assert!(!blocks.is_empty(), "No blocks found.");
 
-        // Load all block images
+        // Collect images: use "all" texture if available, fallback to first available texture
         let mut images: Vec<(String, RgbaImage)> = Vec::new();
+
         for block in &blocks {
-            let path = format!("assets/{}", block.texture);
-            match image::open(&path) {
-                Ok(img) => {
-                    let rgba = img.to_rgba8();
-                    images.push((block.id.clone(), rgba));
-                }
-                Err(e) => {
-                    println!("Failed to load texture for {}: {}", block.id, e);
+            if let Some(state) = &block.block_states.default {
+                if let Some(model) = &state.model {
+                    // Use texture key "all" first, otherwise the first texture
+                    let tex_entry = model.textures.get("all")
+                        .or_else(|| model.textures.values().next());
+
+                    if let Some(tex) = tex_entry {
+                        let path = format!("assets/{}", tex);
+                        match image::open(&path) {
+                            Ok(img) => {
+                                images.push((block.id.clone(), img.to_rgba8()));
+                            }
+                            Err(e) => {
+                                println!("Failed to load texture for {}: {}", block.id, e);
+                            }
+                        }
+                    } else {
+                        println!("No texture found for block {}", block.id);
+                    }
                 }
             }
         }
 
         // Assume all block textures are the same size for now //TODO: Maybe change that.
+        assert!(!images.is_empty(), "No block textures loaded.");
+
         let tile_size = images[0].1.width();
         let tiles_per_row = (images.len() as f32).sqrt().ceil() as u32;
         let atlas_width = tile_size * tiles_per_row;
@@ -72,14 +85,8 @@ impl TextureAtlas {
             atlas.copy_from(img, x, y).unwrap();
 
             // Calculate normalized UVs
-            let uv_min = [
-                x as f32 / atlas_width as f32,
-                y as f32 / atlas_height as f32,
-            ];
-            let uv_max = [
-                (x + tile_size) as f32 / atlas_width as f32,
-                (y + tile_size) as f32 / atlas_height as f32,
-            ];
+            let uv_min = [x as f32 / atlas_width as f32, y as f32 / atlas_height as f32];
+            let uv_max = [(x + tile_size) as f32 / atlas_width as f32, (y + tile_size) as f32 / atlas_height as f32];
 
             block_uvs.insert(id.clone(), AtlasUV { uv_min, uv_max });
         }
@@ -138,6 +145,8 @@ impl TextureAtlas {
             CommandBufferUsage::OneTimeSubmit,
         )
             .unwrap();
+
+        builder.copy_buffer_to_image(CopyBufferToImageInfo::buffer_image(staging, texture_image.clone())).unwrap();
 
         let command_buffer = builder.build().unwrap();
 

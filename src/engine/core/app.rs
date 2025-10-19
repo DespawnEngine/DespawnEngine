@@ -201,17 +201,23 @@ impl App {
         self.block_uvs = Some(atlas.block_uvs.clone());
 
         // Determine texture path from the temporary test block (fallback to default texture)
-        let texture_path = self
-            .content
-            .as_ref()
-            .and_then(|gc| gc.blocks.get("template:dirt").map(|b| b.texture.clone()))
+        let texture_path = self.content.as_ref()
+            .and_then(|gc| gc.blocks.get("template:dirt"))
+            .and_then(|block| {
+                block.block_states.default.as_ref()
+                    .and_then(|state| state.model.as_ref())
+                    .and_then(|model| {
+                        // use "all" texture temporarily
+                        model.textures.get("all").cloned()
+                    })
+            })
             .map(|p| {
                 let path = std::path::Path::new(&p);
                 if path.is_absolute() {
-                    p // already absolute
+                    p
                 } else {
-                    // "textures/blocks/dirt.png" ->> "assets/textures/blocks/dirt.png"
-                    format!("assets/{}", p.trim_start_matches(std::path::MAIN_SEPARATOR))
+                    // Use forward slashes for assets path
+                    format!("assets/{}", p.trim_start_matches(|c| c == '/' || c == '\\'))
                 }
             })
             .unwrap_or_else(|| "assets/texture.png".to_string());

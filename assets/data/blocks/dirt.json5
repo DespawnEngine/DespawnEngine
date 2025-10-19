@@ -1,0 +1,10 @@
+{
+  "id": "template:dirt",
+  "block_states":
+  {
+    "default":
+    {
+      "model_name": "dirt.json5",
+    }
+  }
+}

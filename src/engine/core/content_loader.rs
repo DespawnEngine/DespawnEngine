@@ -1,15 +1,15 @@
 use crate::content::block::block::Block;
+use crate::content::block::block_registry::load_blocks;
 use crate::utils::registry::Registry;
-use crate::engine::resources::load_json5_dir;
 use std::sync::{OnceLock, Arc};
+use crate::content::block::block::BlockModel;
 
 /// Singleton instance
 pub static GAME_CONTENT: OnceLock<Arc<GameContent>> = OnceLock::new();
 
 pub struct GameContent {
     pub blocks: Registry<Block>,
-    // pub items: Registry<Item>,
-    // pub entities: Registry<Entity>,
+    pub block_model: Registry<BlockModel>,
 }
 
 impl GameContent {
@@ -22,22 +22,13 @@ impl GameContent {
         GAME_CONTENT.get().expect("GameContent not initialized").clone()
     }
 
-    /// Load all content from JSON5 files
+    /// Loads everything from the BlockRegistry
     pub fn load_all() -> Self {
         println!("--- Loading game content ---");
 
-        let mut blocks = Registry::new();
-        for block in load_json5_dir::<Block>("assets/block") {
-            let id = block.id.clone();
-            println!("Registering block: {}", id);
-            blocks.register(&id, block);
-        }
+        let (blocks, block_model) = load_blocks();
 
         println!("--- Finished loading game content ---");
-        Self {
-            blocks,
-            // items,
-            // entities,
-        }
+        Self { blocks, block_model }
     }
 }

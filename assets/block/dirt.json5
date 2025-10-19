@@ -1,8 +1,0 @@
-{
-  id: "template:dirt",
-  name: "Dirt Block",
-  texture: "textures/blocks/dirt.png",
-  "properties": {
-    "is_solid": true
-  }
-}

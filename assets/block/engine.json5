@@ -1,8 +1,0 @@
-{
-  id: "template:engine",
-  name: "Engine Block",
-  texture: "textures/blocks/engine.png",
-  "properties": {
-    "is_solid": true
-  }
-}

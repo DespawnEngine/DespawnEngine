@@ -1,0 +1,8 @@
+{
+  // this is a test and cannot be loaded temporarily.
+  "textures": {
+    "top": "textures/blocks/engine.png",
+    "bottom": "textures/blocks/dirt.png",
+    "side": "textures/blocks/engine.png"
+  }
+}
