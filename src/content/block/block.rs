@@ -14,8 +14,6 @@ pub struct Block {
 #[derive(Deserialize, Debug, Clone, Default)]
 pub struct BlockProperties {
     #[serde(default)]
-    pub is_air: bool, // whether this block should be treated as empty/air
-    #[serde(default)]
     pub is_solid: bool,
 
     // Runtime only, for texture atlas
@@ -38,10 +36,6 @@ impl Default for Block {
 
 // Helper method for checking properties
 impl Block {
-    pub fn is_air(&self) -> bool {
-        self.properties.is_air
-    }
-
     pub fn is_solid(&self) -> bool {
         self.properties.is_solid
     }

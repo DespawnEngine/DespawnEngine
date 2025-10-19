@@ -85,8 +85,8 @@ impl TextureAtlas {
         }
 
         // This saves a debug copy so I can make sure it works fine and see what's going on easily.
-        atlas.save("atlas_debug.png").unwrap();
-        println!("Saved texture atlas to atlas_debug.png ({}x{})", atlas_width, atlas_height);
+        //atlas.save("atlas_debug.png").unwrap();
+        //println!("Saved texture atlas to atlas_debug.png ({}x{})", atlas_width, atlas_height);
 
         // ---- Upload to GPU ----
         let img_data = atlas.into_raw();

@@ -3,7 +3,6 @@
   name: "Dirt Block",
   texture: "textures/blocks/dirt.png",
   "properties": {
-    "is_air": false,
     "is_solid": true
   }
 }

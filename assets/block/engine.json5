@@ -3,7 +3,6 @@
   name: "Engine Block",
   texture: "textures/blocks/engine.png",
   "properties": {
-    "is_air": false,
     "is_solid": true
   }
 }
