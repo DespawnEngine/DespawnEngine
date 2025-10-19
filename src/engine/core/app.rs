@@ -97,7 +97,7 @@ pub struct App {
     memory_allocator: Option<Arc<StandardMemoryAllocator>>,
     camera: Option<Camera>,
     input_state: Option<InputState>,
-    user_settings: Option<UserSettings>,
+    user_settigns: Option<UserSettings>,
     last_frame_time: Option<std::time::Instant>,
     capture_cursor: bool,
     scene_manager: Option<SceneManager>, // MAIN GAME SCENE MANAGER
@@ -135,7 +135,7 @@ impl Default for App {
             memory_allocator: None,
             camera: None,
             input_state: None,
-            user_settings: None,
+            user_settigns: None,
             last_frame_time: None,
             capture_cursor: true,
             scene_manager: None, // MAIN GAME SCENE MANAGER
@@ -242,7 +242,7 @@ impl App {
         self.input_state = Some(InputState::default());
 
         // UserSettings is a singleton in order for easy access anywhere and hot reloading
-        self.user_settings = Some(UserSettings::instance());
+        self.user_settigns = Some(UserSettings::instance());
     }
     fn create_pipeline(&mut self) {
         let depth_stencil_state = DepthStencilState {
