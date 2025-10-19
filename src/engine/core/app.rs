@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::ops::Not;
 use std::sync::Arc;
 use std::time::{self, Instant};
@@ -64,6 +65,7 @@ use crate::engine::scenes::handling::scene_trait::SceneResources;
 use crate::utils::registry::Registry;
 use image::io::Reader as ImageReader;
 use std::io::Cursor;
+use crate::engine::rendering::texture_atlas::{AtlasUV, TextureAtlas};
 use vulkano::command_buffer::CopyBufferToImageInfo;
 use vulkano::format::Format;
 use vulkano::image::ImageCreateInfo;
@@ -102,6 +104,7 @@ pub struct App {
     texture: Option<Arc<vulkano::image::view::ImageView>>,
     sampler: Option<Arc<vulkano::image::sampler::Sampler>>,
     pub content: Option<Arc<GameContent>>,
+    pub block_uvs: Option<HashMap<String, AtlasUV>>,
 }
 
 impl Default for App {
@@ -139,6 +142,7 @@ impl Default for App {
             sampler: None,
             texture: None,
             content: None,
+            block_uvs: None,
         }
     }
 }
@@ -187,11 +191,20 @@ impl App {
         // Load game content (from JSON files)
         self.load_game_content();
 
+        // Generate texture atlas from loaded blocks. //TODO: This'll replace the individual texture loading below
+        let atlas = crate::engine::rendering::texture_atlas::TextureAtlas::generate(
+            memory_allocator.clone(),
+            queue.clone(),
+            &self.content.as_ref().unwrap(),
+        );
+        self.texture = Some(atlas.image_view.clone());
+        self.block_uvs = Some(atlas.block_uvs.clone());
+
         // Determine texture path from the temporary test block (fallback to default texture)
         let texture_path = self
             .content
             .as_ref()
-            .and_then(|gc| gc.blocks.get("template:engine").map(|b| b.texture.clone()))
+            .and_then(|gc| gc.blocks.get("template:dirt").map(|b| b.texture.clone()))
             .map(|p| {
                 let path = std::path::Path::new(&p);
                 if path.is_absolute() {

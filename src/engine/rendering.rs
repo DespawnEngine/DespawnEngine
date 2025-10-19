@@ -6,3 +6,4 @@ pub mod mvp;
 pub mod camera;
 pub(crate) mod descriptor_helpers;
 pub(crate) mod cube;
+pub(crate) mod texture_atlas;

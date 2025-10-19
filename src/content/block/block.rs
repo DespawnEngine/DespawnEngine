@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use crate::engine::rendering::texture_atlas::AtlasUV;
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Block {
@@ -16,6 +17,12 @@ pub struct BlockProperties {
     pub is_air: bool, // whether this block should be treated as empty/air
     #[serde(default)]
     pub is_solid: bool,
+
+    // Runtime only, for texture atlas
+    #[serde(skip)]
+    pub uv_min: [f32; 2],
+    #[serde(skip)]
+    pub uv_max: [f32; 2],
 }
 
 impl Default for Block {
@@ -37,5 +44,10 @@ impl Block {
 
     pub fn is_solid(&self) -> bool {
         self.properties.is_solid
+    }
+
+    pub fn set_uv(&mut self, uv: AtlasUV) {
+        self.properties.uv_min = uv.uv_min;
+        self.properties.uv_max = uv.uv_max;
     }
 }
