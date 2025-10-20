@@ -1,2 +1,2 @@
 pub(crate) mod block;
-mod block_registry;
+pub(crate) mod block_registry;

@@ -1,4 +1,4 @@
 {
   // IDK how to do Mouse Sensitivity good its all just multiplied, see src/engine/core/input.rs:120-121
-  "Mouse Sensitivity": "1.0",
+  "Mouse Sensitivity": "100.0",
 }

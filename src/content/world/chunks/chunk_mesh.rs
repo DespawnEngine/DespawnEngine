@@ -1,48 +1,112 @@
 use std::sync::Arc;
-use vulkano::buffer::{Subbuffer, BufferCreateInfo, BufferUsage, Buffer};
-use vulkano::memory::allocator::{StandardMemoryAllocator, AllocationCreateInfo, MemoryTypeFilter};
+use std::time::Instant;
+use std::collections::HashMap;
+use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer};
+use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
 
-use crate::engine::rendering::vertex::MyVertex;
+use crate::content::block::block::Block;
+use crate::content::world::chunks::chunk::{CHUNK_SIZE, Chunk, MAX_CHUNK_INDEX};
 use crate::engine::rendering::cube;
-use crate::content::world::chunks::chunk::{Chunk, CHUNK_SIZE};
+use crate::engine::rendering::vertex::BlockVertex;
 use crate::utils::math::Vec3;
+use crate::engine::rendering::texture_atlas::AtlasUV;
 
 /// Builds chunk mesh by adding one cube for each non-air block.
-/// TODO: Optimize this with face culling!
 pub fn build_chunk_mesh(
     allocator: Arc<StandardMemoryAllocator>,
     chunk: &Chunk,
-) -> Subbuffer<[MyVertex]> {
-    let mut vertices: Vec<MyVertex> = Vec::new();
+    block_uvs: &HashMap<String, AtlasUV>,
+) -> Subbuffer<[BlockVertex]> {
+    let start_build = Instant::now();
 
-    // Get a cube’s vertices (centered at origin)
-    let cube_vertices = cube::get_cube_vertices();
+    let mut vertices = Vec::new();
 
-    for x in 0..CHUNK_SIZE {
-        for y in 0..CHUNK_SIZE {
-            for z in 0..CHUNK_SIZE {
-                let idx = Chunk::index(x, y, z);
-                let palette_idx = chunk.blocks[idx] as usize;
-                let block_id = &chunk.palette[palette_idx];
+    let map_uv = |orig: [f32; 2], atlas: AtlasUV| -> [f32; 2] {
+        [
+            atlas.uv_min[0] + orig[0] * (atlas.uv_max[0] - atlas.uv_min[0]),
+            atlas.uv_min[1] + orig[1] * (atlas.uv_max[1] - atlas.uv_min[1]),
+        ]
+    };
 
-                // Ignore air blocks
-                if block_id.contains("air") {
-                    continue;
-                }
+    let is_air = |idx: usize| chunk.is_air_at_idx(idx);
 
-                // Add cube vertices offset by block position
-                for v in &cube_vertices {
-                    let mut v = *v;
-                    v.position = Vec3::from([
-                        v.position[0] + x as f32,
-                        v.position[1] + y as f32,
-                        v.position[2] + z as f32,
-                    ]);
-                    vertices.push(v);
-                }
-            }
+    for idx in 0..MAX_CHUNK_INDEX {
+        let palette_idx = chunk.blocks[idx] as usize;
+        let block_id = &chunk.palette[palette_idx];
+
+        if chunk.is_air_at_idx(idx) {
+            continue;
+        }
+
+        // deriving the coords instead of nested loops
+        let x = idx % CHUNK_SIZE;
+        let y = (idx / CHUNK_SIZE) % CHUNK_SIZE;
+        let z = idx / (CHUNK_SIZE * CHUNK_SIZE);
+
+        // Precompute neighbor "air" checks
+        let top_air    = y == CHUNK_SIZE - 1        || is_air(idx + CHUNK_SIZE);
+        let bottom_air = y == 0                     || is_air(idx - CHUNK_SIZE);
+        let rear_air   = z == 0                     || is_air(idx - CHUNK_SIZE * CHUNK_SIZE);
+        let front_air  = z == CHUNK_SIZE - 1        || is_air(idx + CHUNK_SIZE * CHUNK_SIZE);
+        let right_air  = x == 0                     || is_air(idx - 1);
+        let left_air   = x == CHUNK_SIZE - 1        || is_air(idx + 1);
+
+        let atlas = block_uvs.get(block_id).copied().unwrap_or(AtlasUV {
+            uv_min: [0.0, 0.0],
+            uv_max: [1.0, 1.0],
+        });
+
+        // if this ever fails, math has somehow broken.
+        debug_assert!(Chunk::index(x, y, z) == idx);
+        
+        let pos_offset = Vec3::from([x as f32, y as f32, z as f32]);
+
+        // conditionally adding vertices if they are on the edge or are next to air
+        if top_air {
+            vertices.extend(cube::TOP_FACE.map(|mut v| {
+                v.position += pos_offset;
+                v.tex_coords = map_uv(v.tex_coords, atlas);
+                v
+            }));
+        }
+        if bottom_air {
+            vertices.extend(cube::BOTTOM_FACE.map(|mut v| {
+                v.position += pos_offset;
+                v.tex_coords = map_uv(v.tex_coords, atlas);
+                v
+            }));
+        }
+        if rear_air {
+            vertices.extend(cube::REAR_FACE.map(|mut v| {
+                v.position += pos_offset;
+                v.tex_coords = map_uv(v.tex_coords, atlas);
+                v
+            }));
+        }
+        if front_air {
+            vertices.extend(cube::FRONT_FACE.map(|mut v| {
+                v.position += pos_offset;
+                v.tex_coords = map_uv(v.tex_coords, atlas);
+                v
+            }));
+        }
+        if right_air {
+            vertices.extend(cube::RIGHT_FACE.map(|mut v| {
+                v.position += pos_offset;
+                v.tex_coords = map_uv(v.tex_coords, atlas);
+                v
+            }));
+        }
+        if left_air {
+            vertices.extend(cube::LEFT_FACE.map(|mut v| {
+                v.position += pos_offset;
+                v.tex_coords = map_uv(v.tex_coords, atlas);
+                v
+            }));
         }
     }
+
+    println!("it took {:?} to build the chunk", start_build.elapsed());
 
     Buffer::from_iter(
         allocator.clone(),
@@ -56,5 +120,6 @@ pub fn build_chunk_mesh(
             ..Default::default()
         },
         vertices,
-    ).unwrap()
+    )
+        .unwrap()
 }

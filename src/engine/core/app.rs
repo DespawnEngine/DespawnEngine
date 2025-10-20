@@ -1,7 +1,8 @@
-use vulkano::image::{sampler, ImageType};
+use std::collections::HashMap;
 use std::ops::Not;
 use std::sync::Arc;
 use std::time::{self, Instant};
+use vulkano::image::{ImageType, sampler};
 
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
 use vulkano::descriptor_set::DescriptorSet;
@@ -47,7 +48,7 @@ use winit::{
 use crate::engine::core::input::{InputState, KeyBind};
 use crate::engine::core::user_settings::UserSettings;
 use crate::engine::rendering::mvp::MVP;
-use crate::engine::rendering::vertex::MyVertex;
+use crate::engine::rendering::vertex::BlockVertex;
 use crate::engine::rendering::vswapchain::{create_swapchain, window_size_dependent_setup};
 use crate::engine::rendering::vulkan::{create_device_and_queue, create_instance};
 use crate::engine::rendering::{
@@ -57,19 +58,20 @@ use crate::engine::rendering::{
 use crate::engine::scenes::handling::scene_manager::SceneManager;
 use crate::engine::ui::egui_integration::EguiStruct;
 
+use crate::content::block::block::Block;
+use crate::engine::core::content_loader::GameContent;
+use crate::engine::resources::load_json5_dir;
+use crate::engine::scenes::handling::scene_trait::SceneResources;
+use crate::utils::registry::Registry;
 use image::io::Reader as ImageReader;
 use std::io::Cursor;
+use crate::engine::rendering::texture_atlas::{AtlasUV, TextureAtlas};
 use vulkano::command_buffer::CopyBufferToImageInfo;
 use vulkano::format::Format;
 use vulkano::image::ImageCreateInfo;
 use vulkano::image::ImageUsage;
 use vulkano::image::sampler::{Filter, Sampler, SamplerCreateInfo};
 use vulkano::image::view::ImageView;
-use crate::utils::registry::Registry;
-use crate::content::block::block::Block;
-use crate::engine::core::content_loader::GameContent;
-use crate::engine::resources::load_json5_dir;
-use crate::engine::scenes::handling::scene_trait::SceneResources;
 
 //
 // `App` holds the state of the application, including all Vulkan objects that need to persist between frames.
@@ -86,7 +88,7 @@ pub struct App {
     recreate_swapchain: bool,
     previous_frame_end: Option<Box<dyn GpuFuture>>,
     command_buffer_allocator: Option<Arc<StandardCommandBufferAllocator>>,
-    vertex_buffer: Option<Subbuffer<[MyVertex]>>,
+    vertex_buffer: Option<Subbuffer<[BlockVertex]>>,
     pipeline: Option<Arc<GraphicsPipeline>>,
     egui: Option<EguiStruct>,
     mvp_buffer: Option<Subbuffer<MVP>>,
@@ -102,6 +104,7 @@ pub struct App {
     texture: Option<Arc<vulkano::image::view::ImageView>>,
     sampler: Option<Arc<vulkano::image::sampler::Sampler>>,
     pub content: Option<Arc<GameContent>>,
+    pub block_uvs: Option<HashMap<String, AtlasUV>>,
 }
 
 impl Default for App {
@@ -139,6 +142,7 @@ impl Default for App {
             sampler: None,
             texture: None,
             content: None,
+            block_uvs: None,
         }
     }
 }
@@ -187,94 +191,15 @@ impl App {
         // Load game content (from JSON files)
         self.load_game_content();
 
-        // Determine texture path from the temporary test block (fallback to default texture)
-        let texture_path = self
-            .content
-            .as_ref()
-            .and_then(|gc| gc.blocks.get("template:engine").map(|b| b.texture.clone()))
-            .map(|p| {
-                let path = std::path::Path::new(&p);
-                if path.is_absolute() {
-                    p // already absolute
-                } else {
-                    // "textures/blocks/dirt.png" ->> "assets/textures/blocks/dirt.png"
-                    format!("assets/{}", p.trim_start_matches(std::path::MAIN_SEPARATOR))
-                }
-            })
-            .unwrap_or_else(|| "assets/texture.png".to_string());
-
-        // Load the image from the path specified in the JSON for the temporary test block.
-        let img = image::open(&texture_path)
-            .unwrap_or_else(|e| panic!("Failed to open texture '{}': {e}", texture_path))
-            .into_rgba8();
-
-        let (width, height) = img.dimensions();
-        let img_data = img.into_raw();
-
-        // Create the GPU image (empty)
-        let texture_image = Image::new(
+        // Generate texture atlas from loaded blocks. //TODO: This'll replace the individual texture loading below
+        let atlas = crate::engine::rendering::texture_atlas::TextureAtlas::generate(
             memory_allocator.clone(),
-            ImageCreateInfo {
-                image_type: ImageType::Dim2d,
-                format: Format::R8G8B8A8_SRGB,
-                extent: [width, height, 1],
-                usage: ImageUsage::TRANSFER_DST | ImageUsage::SAMPLED,
-                ..Default::default()
-            },
-            AllocationCreateInfo {
-                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
-                ..Default::default()
-            },
-        ).unwrap();
-
-        // Upload pixels via a staging buffer
-        let staging_buffer = Buffer::from_iter(
-            memory_allocator.clone(),
-            BufferCreateInfo {
-                usage: BufferUsage::TRANSFER_SRC,
-                ..Default::default()
-            },
-            AllocationCreateInfo {
-                memory_type_filter: MemoryTypeFilter::PREFER_HOST
-                    | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-                ..Default::default()
-            },
-            img_data,
-        ).unwrap();
-
-        let mut builder = AutoCommandBufferBuilder::primary(
-            self.command_buffer_allocator.as_ref().unwrap().clone(),
-            queue.queue_family_index(),
-            CommandBufferUsage::OneTimeSubmit,
-        ).unwrap();
-
-        builder
-            .copy_buffer_to_image(CopyBufferToImageInfo::buffer_image(
-                staging_buffer,
-                texture_image.clone(),
-            )).unwrap();
-
-        let command_buffer = builder.build().unwrap();
-        let future = sync::now(device.clone())
-            .then_execute(queue.clone(), command_buffer)
-            .unwrap()
-            .then_signal_fence_and_flush()
-            .unwrap();
-        future.wait(None).unwrap();
-
-        // Create the view & sampler
-        let texture = ImageView::new_default(texture_image.clone()).unwrap();
-        let sampler = Sampler::new(
-            device.clone(),
-            SamplerCreateInfo {
-                mag_filter: Filter::Nearest, // Basically the same as nearest neighbor. Keeps sharp pixels.
-                min_filter: Filter::Nearest,
-                ..Default::default()
-            },
-        ).unwrap();
-
-        self.texture = Some(texture);
-        self.sampler = Some(sampler);
+            queue.clone(),
+            &self.content.as_ref().unwrap(),
+        );
+        self.texture = Some(atlas.image_view.clone());
+        self.sampler = Some(atlas.sampler.clone());
+        self.block_uvs = Some(atlas.block_uvs.clone());
 
         let vertex_buffer = create_vertex_buffer(memory_allocator.clone());
         self.vertex_buffer = Some(vertex_buffer);
@@ -293,7 +218,8 @@ impl App {
                 ..Default::default()
             },
             MVP::default(),
-        ).unwrap();
+        )
+        .unwrap();
         self.mvp_buffer = Some(mvp_buffer); // Temp store if needed later
 
         let framebuffers = window_size_dependent_setup(
@@ -351,7 +277,7 @@ impl App {
             let vs_entry = vs.entry_point("main").unwrap();
             let fs_entry = fs.entry_point("main").unwrap();
 
-            let vertex_input_state = MyVertex::per_vertex().definition(&vs_entry).unwrap();
+            let vertex_input_state = BlockVertex::per_vertex().definition(&vs_entry).unwrap();
 
             let stages = [
                 PipelineShaderStageCreateInfo::new(vs_entry),
@@ -458,6 +384,9 @@ impl ApplicationHandler for App {
         let resources = SceneResources {
             memory_allocator: self.memory_allocator.as_ref().unwrap().clone(),
             default_pipeline: self.pipeline.as_ref().unwrap().clone(),
+            texture: self.texture.as_ref().unwrap().clone(),
+            sampler: self.sampler.as_ref().unwrap().clone(),
+            block_uvs: self.block_uvs.clone(), // passes atlas UVs
         };
         scene_manager.set_scene_resources(resources);
         scene_manager.awake();
@@ -494,6 +423,7 @@ impl ApplicationHandler for App {
         egui.update(
             &event,
             self.last_frame_time.unwrap_or(Instant::now()).elapsed(),
+            self.camera.unwrap().position.into(),
         );
 
         self.input_state

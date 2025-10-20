@@ -1,20 +1,21 @@
 use std::f32::consts::PI;
+use std::ops::AddAssign;
 use std::ops::Div;
 use std::ops::Index;
 use std::ops::Mul;
 use std::process::Output;
 
-use glam::mat4 as glam_mat4_construct;
 use glam::EulerRot;
 use glam::Mat4 as glam_mat4;
 use glam::Quat as glam_quat;
 use glam::Vec3 as glam_vec3;
 use glam::Vec4 as glam_vec4;
+use glam::mat4 as glam_mat4_construct;
 use vulkano::buffer::BufferContents;
 
 #[derive(BufferContents, Copy, Clone, Debug, Default)]
 #[repr(C)]
-pub struct Vec3([f32; 3]);
+pub struct Vec3(pub(crate) [f32; 3]);
 
 #[derive(BufferContents, Copy, Clone, Debug, Default)]
 #[repr(C)]
@@ -61,16 +62,15 @@ impl Quat {
         )
         .into()
     }
-
 }
 
-impl Default for Mat4{
+impl Default for Mat4 {
     fn default() -> Self {
-        Mat4::IDENTITY   
+        Mat4::IDENTITY
     }
 }
 
-impl Default for Quat{
+impl Default for Quat {
     fn default() -> Self {
         Quat::IDENTITY
     }
@@ -80,17 +80,10 @@ impl Default for Quat{
 // https://docs.rs/glm/latest/src/glm/ext/matrix/transform.rs.html#65-88
 
 /// Creates a matrix for a right handed, symetric perspective-view frustum.
-
-///
-
 /// `fov_y` is the field of view angle in the y direction in radians.
-
 /// The `aspect` ratio determines the field of view in the x direction.
-
 /// `near_z` is the distance from the viewer to the near clipping plane (always positive) and
-
 /// `far_z` is the distance from the viewer to the far clipping plane (always positive).
-
 pub fn perspective_rh(fov_y: f32, aspect: f32, z_near: f32, z_far: f32) -> Mat4 {
     let zero = 0.0;
     let one = 1.0;
@@ -134,12 +127,19 @@ impl From<glam_vec3> for Vec3 {
     }
 }
 
+impl AddAssign for Vec3 {
+    fn add_assign(&mut self, rhs: Self) {
+        self.0[0] += rhs.0[0];
+        self.0[1] += rhs.0[1];
+        self.0[2] += rhs.0[2];
+    }
+}
+
 impl From<Vec3> for glam_vec3 {
     fn from(value: Vec3) -> Self {
         glam_vec3::from_array(value.0)
     }
 }
-
 
 impl<Idx: Into<i32>> Index<Idx> for Vec3 {
     type Output = f32;

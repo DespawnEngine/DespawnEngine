@@ -22,3 +22,11 @@ pub fn load_json5_dir<T: DeserializeOwned>(dir: &str) -> Vec<T> {
 
     results
 }
+
+pub fn load_json5_file<T: DeserializeOwned>(path: &str) -> T {
+    let content = fs::read_to_string(path)
+        .unwrap_or_else(|_| panic!("Failed to read file {}", path));
+
+    serde_json5::from_str(&content)
+        .unwrap_or_else(|e| panic!("Failed to parse {}: {}", path, e))
+}

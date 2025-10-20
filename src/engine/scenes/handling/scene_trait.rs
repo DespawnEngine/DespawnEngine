@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use crate::engine::core::input::InputState;
 use crate::engine::rendering::camera::Camera;
 use vulkano::memory::allocator::StandardMemoryAllocator;
@@ -10,11 +11,15 @@ use vulkano::image::sampler::Sampler;
 use vulkano::image::view::ImageView;
 use vulkano::pipeline::graphics::viewport::Viewport;
 use vulkano::pipeline::GraphicsPipeline;
+use crate::engine::rendering::texture_atlas::AtlasUV;
 
 #[derive(Clone)]
 pub struct SceneResources {
-    pub memory_allocator: Arc<StandardMemoryAllocator>,
     pub default_pipeline: Arc<GraphicsPipeline>,
+    pub memory_allocator: Arc<StandardMemoryAllocator>,
+    pub texture: Arc<ImageView>,
+    pub sampler: Arc<Sampler>,
+    pub block_uvs: Option<HashMap<String, AtlasUV>>,
 }
 
 pub trait Scene: Send {

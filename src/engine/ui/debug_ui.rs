@@ -8,7 +8,7 @@ use std::{collections::VecDeque, sync::Arc, time::Duration};
 use sysinfo::{Process, System};
 use vulkano::device::Queue;
 
-use crate::engine::core::input;
+use crate::{engine::core::input, utils::math::Vec3};
 
 type MemoryUsageBytes = u64;
 type CpuUsagePercent = f64;
@@ -62,7 +62,13 @@ impl DebugUi {
     }
 
     // has an implicit lifetime due to using a System ref. Doesn't do much though.
-    pub fn render(&mut self, ctx: &Context, system: &System, delta_time: Duration) {
+    pub fn render(
+        &mut self,
+        ctx: &Context,
+        system: &System,
+        delta_time: Duration,
+        pos: Option<Vec3>,
+    ) {
         ctx.set_fonts(self.fonts.clone());
 
         let fps: f32 = 1.0 / delta_time.as_secs_f64() as f32;
@@ -81,7 +87,25 @@ impl DebugUi {
                 let fps_label = Label::new(format!("FPS: {}", fps.trunc())).selectable(false);
                 ui.add(fps_label);
             });
-
+        egui::TopBottomPanel::top("Camera Position")
+            .frame(egui::Frame {
+                inner_margin: Margin::ZERO,
+                outer_margin: Margin::ZERO,
+                fill: Color32::from_rgba_premultiplied(0, 0, 0, 0),
+                stroke: Stroke::NONE,
+                corner_radius: CornerRadius::ZERO,
+                shadow: Shadow::NONE,
+            })
+            .show_separator_line(false)
+            .show(ctx, |ui| {
+                if let Some(position) = pos {
+                    let position_label = Label::new(format!(
+                        "POS: {}, {}, {}",
+                        position.0[0], position.0[1], position.0[2]
+                    ));
+                    ui.add(position_label);
+                }
+            });
         egui::Window::new("Despawn Debugger")
             .resizable(true)
             .show(ctx, |ui| {

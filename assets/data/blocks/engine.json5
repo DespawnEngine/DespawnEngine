@@ -1,0 +1,10 @@
+{
+  "id": "template:engine",
+  "block_states":
+  {
+    "default":
+    {
+      "model_name": "engine.json5",
+    }
+  }
+}

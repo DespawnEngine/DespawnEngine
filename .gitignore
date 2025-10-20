@@ -11,3 +11,5 @@ Cargo.lock
 # OS-specific
 .DS_Store
 Thumbs.db
+
+atlas_debug.png
