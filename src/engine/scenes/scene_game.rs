@@ -17,6 +17,7 @@ use vulkano::image::sampler::Sampler;
 use vulkano::image::view::ImageView;
 use vulkano::memory::allocator::StandardMemoryAllocator;
 use vulkano::pipeline::graphics::viewport::Viewport;
+use crate::engine::rendering::texture_atlas::AtlasUV;
 
 pub struct GameScene {
     pub world: Option<World>,
@@ -102,7 +103,11 @@ impl Scene for GameScene {
             let content = GameContent::get();
             let chunk = world.load_chunk([0, 0, 0], &content);
             let allocator = world.memory_allocator.clone().unwrap();
-            let chunk_mesh = build_chunk_mesh(allocator, &chunk);
+            let chunk_mesh = build_chunk_mesh(
+                allocator,
+                &chunk,
+                res.block_uvs.as_ref().unwrap(),
+            );
 
             self.chunk_meshes.insert([0, 0, 0], chunk_mesh);
             self.world = Some(world);
@@ -119,7 +124,7 @@ impl GameScene {
     }
 
     /// Initialize world and build meshes for all loaded chunks
-    pub fn init_world(&mut self) {
+    pub fn init_world(&mut self, block_uvs: &HashMap<String, AtlasUV>) {
         let content: Arc<GameContent> = GameContent::get();
         let mut world = World::new();
 
@@ -128,8 +133,7 @@ impl GameScene {
             panic!("World missing allocator, pass StandardMemoryAllocator when creating world.");
         });
 
-        let chunk_mesh = build_chunk_mesh(allocator, &chunk);
-
+        let chunk_mesh = build_chunk_mesh(allocator, &chunk, block_uvs);
         self.chunk_meshes.insert([0, 0, 0], chunk_mesh);
         self.world = Some(world);
     }

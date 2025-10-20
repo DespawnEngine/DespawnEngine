@@ -198,107 +198,8 @@ impl App {
             &self.content.as_ref().unwrap(),
         );
         self.texture = Some(atlas.image_view.clone());
+        self.sampler = Some(atlas.sampler.clone());
         self.block_uvs = Some(atlas.block_uvs.clone());
-
-        // Determine texture path from the temporary test block (fallback to default texture)
-        let texture_path = self.content.as_ref()
-            .and_then(|gc| gc.blocks.get("template:dirt"))
-            .and_then(|block| {
-                block.block_states.default.as_ref()
-                    .and_then(|state| state.model.as_ref())
-                    .and_then(|model| {
-                        // use "all" texture temporarily
-                        model.textures.get("all").cloned()
-                    })
-            })
-            .map(|p| {
-                let path = std::path::Path::new(&p);
-                if path.is_absolute() {
-                    p
-                } else {
-                    // Use forward slashes for assets path
-                    format!("assets/{}", p.trim_start_matches(|c| c == '/' || c == '\\'))
-                }
-            })
-            .unwrap_or_else(|| "assets/texture.png".to_string());
-
-        // Load the image from the path specified in the JSON for the temporary test block.
-        let img = image::open(&texture_path)
-            .unwrap_or_else(|e| panic!("Failed to open texture '{}': {e}", texture_path))
-            .into_rgba8();
-
-        let (width, height) = img.dimensions();
-        let img_data = img.into_raw();
-
-        // Create the GPU image (empty)
-        let texture_image = Image::new(
-            memory_allocator.clone(),
-            ImageCreateInfo {
-                image_type: ImageType::Dim2d,
-                format: Format::R8G8B8A8_SRGB,
-                extent: [width, height, 1],
-                usage: ImageUsage::TRANSFER_DST | ImageUsage::SAMPLED,
-                ..Default::default()
-            },
-            AllocationCreateInfo {
-                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
-                ..Default::default()
-            },
-        )
-        .unwrap();
-
-        // Upload pixels via a staging buffer
-        let staging_buffer = Buffer::from_iter(
-            memory_allocator.clone(),
-            BufferCreateInfo {
-                usage: BufferUsage::TRANSFER_SRC,
-                ..Default::default()
-            },
-            AllocationCreateInfo {
-                memory_type_filter: MemoryTypeFilter::PREFER_HOST
-                    | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-                ..Default::default()
-            },
-            img_data,
-        )
-        .unwrap();
-
-        let mut builder = AutoCommandBufferBuilder::primary(
-            self.command_buffer_allocator.as_ref().unwrap().clone(),
-            queue.queue_family_index(),
-            CommandBufferUsage::OneTimeSubmit,
-        )
-        .unwrap();
-
-        builder
-            .copy_buffer_to_image(CopyBufferToImageInfo::buffer_image(
-                staging_buffer,
-                texture_image.clone(),
-            ))
-            .unwrap();
-
-        let command_buffer = builder.build().unwrap();
-        let future = sync::now(device.clone())
-            .then_execute(queue.clone(), command_buffer)
-            .unwrap()
-            .then_signal_fence_and_flush()
-            .unwrap();
-        future.wait(None).unwrap();
-
-        // Create the view & sampler
-        let texture = ImageView::new_default(texture_image.clone()).unwrap();
-        let sampler = Sampler::new(
-            device.clone(),
-            SamplerCreateInfo {
-                mag_filter: Filter::Nearest, // Basically the same as nearest neighbor. Keeps sharp pixels.
-                min_filter: Filter::Nearest,
-                ..Default::default()
-            },
-        )
-        .unwrap();
-
-        self.texture = Some(texture);
-        self.sampler = Some(sampler);
 
         let vertex_buffer = create_vertex_buffer(memory_allocator.clone());
         self.vertex_buffer = Some(vertex_buffer);
@@ -483,6 +384,9 @@ impl ApplicationHandler for App {
         let resources = SceneResources {
             memory_allocator: self.memory_allocator.as_ref().unwrap().clone(),
             default_pipeline: self.pipeline.as_ref().unwrap().clone(),
+            texture: self.texture.as_ref().unwrap().clone(),
+            sampler: self.sampler.as_ref().unwrap().clone(),
+            block_uvs: self.block_uvs.clone(), // passes atlas UVs
         };
         scene_manager.set_scene_resources(resources);
         scene_manager.awake();

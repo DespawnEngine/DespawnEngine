@@ -6,7 +6,7 @@ use vulkano::image::{Image, ImageCreateInfo, ImageType, ImageUsage};
 use vulkano::image::view::ImageView;
 use vulkano::memory::allocator::{StandardMemoryAllocator, AllocationCreateInfo, MemoryTypeFilter};
 use vulkano::format::Format;
-
+use vulkano::image::sampler::Sampler;
 use crate::content::block::block::{Block, BlockModel};
 use crate::engine::core::content_loader::GameContent;
 
@@ -20,6 +20,7 @@ pub struct AtlasUV {
 /// Contains the generated atlas and lookup table
 pub struct TextureAtlas {
     pub image_view: Arc<ImageView>,
+    pub sampler: Arc<Sampler>,
     pub block_uvs: HashMap<String, AtlasUV>,
 }
 
@@ -50,15 +51,9 @@ impl TextureAtlas {
                     if let Some(tex) = tex_entry {
                         let path = format!("assets/{}", tex);
                         match image::open(&path) {
-                            Ok(img) => {
-                                images.push((block.id.clone(), img.to_rgba8()));
-                            }
-                            Err(e) => {
-                                println!("Failed to load texture for {}: {}", block.id, e);
-                            }
+                            Ok(img) => images.push((block.id.clone(), img.to_rgba8())),
+                            Err(e) => println!("Failed to load texture for {}: {}", block.id, e),
                         }
-                    } else {
-                        println!("No texture found for block {}", block.id);
                     }
                 }
             }
@@ -67,12 +62,13 @@ impl TextureAtlas {
         // Assume all block textures are the same size for now //TODO: Maybe change that.
         assert!(!images.is_empty(), "No block textures loaded.");
 
+        // Compute atlas dimensions
         let tile_size = images[0].1.width();
         let tiles_per_row = (images.len() as f32).sqrt().ceil() as u32;
         let atlas_width = tile_size * tiles_per_row;
         let atlas_height = tile_size * ((images.len() as u32 + tiles_per_row - 1) / tiles_per_row);
 
-        // Create empty atlas
+        // Create empty atlas and fill it
         let mut atlas = RgbaImage::new(atlas_width, atlas_height);
 
         let mut block_uvs = HashMap::new();
@@ -84,10 +80,12 @@ impl TextureAtlas {
 
             atlas.copy_from(img, x, y).unwrap();
 
-            // Calculate normalized UVs
+            // Normalized UVs
             let uv_min = [x as f32 / atlas_width as f32, y as f32 / atlas_height as f32];
-            let uv_max = [(x + tile_size) as f32 / atlas_width as f32, (y + tile_size) as f32 / atlas_height as f32];
-
+            let uv_max = [
+                (x + tile_size) as f32 / atlas_width as f32,
+                (y + tile_size) as f32 / atlas_height as f32,
+            ];
             block_uvs.insert(id.clone(), AtlasUV { uv_min, uv_max });
         }
 
@@ -99,8 +97,12 @@ impl TextureAtlas {
         let img_data = atlas.into_raw();
 
         use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
-        use vulkano::command_buffer::{allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage, CopyBufferToImageInfo};
+        use vulkano::command_buffer::{
+            allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage,
+            CopyBufferToImageInfo,
+        };
         use vulkano::sync::{self, GpuFuture};
+        use vulkano::image::sampler::{Sampler, SamplerCreateInfo, Filter, SamplerAddressMode};
 
         let texture_image = Image::new(
             allocator.clone(),
@@ -146,7 +148,12 @@ impl TextureAtlas {
         )
             .unwrap();
 
-        builder.copy_buffer_to_image(CopyBufferToImageInfo::buffer_image(staging, texture_image.clone())).unwrap();
+        builder
+            .copy_buffer_to_image(CopyBufferToImageInfo::buffer_image(
+                staging,
+                texture_image.clone(),
+            ))
+            .unwrap();
 
         let command_buffer = builder.build().unwrap();
 
@@ -160,8 +167,32 @@ impl TextureAtlas {
 
         let image_view = ImageView::new_default(texture_image.clone()).unwrap();
 
-        println!("Texture Atlas uploaded to GPU, {}x{}", atlas_width, atlas_height);
+        // Create a single sampler for the entire atlas
+        let sampler = Sampler::new(
+            allocator.device().clone(),
+            SamplerCreateInfo {
+                mag_filter: Filter::Nearest, // // Basically the same as nearest neighbor. Keeps sharp pixels.
+                min_filter: Filter::Nearest,
+                address_mode: [
+                    SamplerAddressMode::Repeat,
+                    SamplerAddressMode::Repeat,
+                    SamplerAddressMode::Repeat,
+                ],
+                ..Default::default()
+            },
+        )
+            .unwrap();
 
-        Self { image_view, block_uvs }
+
+        println!(
+            "Texture Atlas uploaded to GPU ({}x{} tiles), sampler created.",
+            atlas_width, atlas_height
+        );
+        
+        Self {
+            image_view,
+            sampler,
+            block_uvs,
+        }
     }
 }

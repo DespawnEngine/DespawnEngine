@@ -91,7 +91,8 @@ impl Chunk {
                     let block_id = if y < CHUNK_SIZE / 2 {
                         dirt_id
                     } else {
-                        AIR_BLOCK_ID
+                        //"template:engine" // 2nd block type to test multi-textures
+                        AIR_BLOCK_ID // Air
                     };
                     self.set_block(x, y, z, block_id);
                 }
