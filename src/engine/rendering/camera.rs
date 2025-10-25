@@ -22,7 +22,7 @@ impl Default for Camera {
         Camera {
             position: Vec3::default(),
             rotation_quat: Quat::default(),
-            speed: 5.0,
+            speed: 50.0,
             sensitivity: 1.0,
         }
     }

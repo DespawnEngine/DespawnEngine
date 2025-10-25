@@ -11,9 +11,12 @@ use serde_json5;
 #[derive(Clone, Copy)]
 pub struct UserSettings {
     pub mouse_sensitivity: f32,
+    pub vertical_render_distance: u32,
+    pub horizontal_render_distance: u32,
 }
 
-const DEFAULT_MOUSE_SENSITIVITY: f32 = 1.0;
+const DEFAULT_MOUSE_SENSITIVITY: f32 = 100.0;
+const DEFAULT_RENDER_DISTANCE: u32 = 16;
 
 impl UserSettings {
     pub fn instance() -> Self {
@@ -40,9 +43,7 @@ impl UserSettings {
 
         let mouse_sensitivity: f32 = data
             .get("Mouse Sensitivity")
-            .unwrap_or(&"1.0".to_string()) //dude this is so stupid idk how to get a closure to
-            //return a &String since using .unwrap_or_else requires a closure. you just don't know
-            //i guess
+            .unwrap_or(&DEFAULT_MOUSE_SENSITIVITY.to_string())
             .parse::<f32>()
             .unwrap_or_else(|_| -> f32 {
                 println!(
@@ -51,6 +52,32 @@ impl UserSettings {
                 DEFAULT_MOUSE_SENSITIVITY
             });
 
-        UserSettings { mouse_sensitivity }
+        let horizontal_render_distance: u32 = data
+            .get("Horizonal Render Distance")
+            .unwrap_or(&DEFAULT_RENDER_DISTANCE.to_string())
+            .parse::<u32>()
+            .unwrap_or_else(|_| -> u32 {
+                println!(
+                    "failed to parse vertical_render_distance from settings file {used_settings_file_path:?}"
+                );
+                DEFAULT_RENDER_DISTANCE
+            });
+
+        let vertical_render_distance : u32 = data
+            .get("Vertical Render Distance")
+            .unwrap_or(&DEFAULT_RENDER_DISTANCE.to_string())
+            .parse::<u32>()
+            .unwrap_or_else(|_| -> u32 {
+                println!(
+                    "failed to parse vertical_render_distance from settings file {used_settings_file_path:?}"
+                );
+                DEFAULT_RENDER_DISTANCE
+            });
+
+        UserSettings {
+            mouse_sensitivity,
+            vertical_render_distance,
+            horizontal_render_distance,
+        }
     }
 }
