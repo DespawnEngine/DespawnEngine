@@ -16,7 +16,7 @@ pub struct UserSettings {
 }
 
 const DEFAULT_MOUSE_SENSITIVITY: f32 = 100.0;
-const DEFAULT_RENDER_DISTANCE: u32 = 16;
+const DEFAULT_RENDER_DISTANCE: u32 = 2;
 
 impl UserSettings {
     pub fn instance() -> Self {
@@ -58,7 +58,7 @@ impl UserSettings {
             .parse::<u32>()
             .unwrap_or_else(|_| -> u32 {
                 println!(
-                    "failed to parse vertical_render_distance from settings file {used_settings_file_path:?}"
+                    "failed to parse horizontal_render_distance from settings file {used_settings_file_path:?}"
                 );
                 DEFAULT_RENDER_DISTANCE
             });

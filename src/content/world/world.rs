@@ -22,10 +22,7 @@ impl World {
         }
     }
 
-    pub fn init(&mut self) {
-        self.load_chunk([0, 0, 0]);
-        self.load_chunk([2, 0, 0]);
-    }
+    pub fn init(&mut self) {}
 
     /// Creates or loads a chunk at the given chunk coordinates
     pub fn get_chunk(&mut self, pos: [i32; 3], content: &GameContent) -> Result<Arc<Chunk>, Error> {
