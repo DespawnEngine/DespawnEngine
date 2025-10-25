@@ -1,3 +1,4 @@
+use rapidhash::RapidHashMap;
 use std::collections::HashMap;
 use std::ops::Not;
 use std::sync::Arc;
@@ -103,7 +104,7 @@ pub struct App {
     texture: Option<Arc<vulkano::image::view::ImageView>>,
     sampler: Option<Arc<vulkano::image::sampler::Sampler>>,
     pub content: Option<Arc<GameContent>>,
-    pub block_uvs: Option<HashMap<String, AtlasUV>>,
+    pub block_uvs: Option<RapidHashMap<String, AtlasUV>>,
 }
 
 impl Default for App {

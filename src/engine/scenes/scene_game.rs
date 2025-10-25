@@ -10,6 +10,7 @@ use crate::engine::rendering::descriptor_helpers::make_mvp_descriptor_set;
 use crate::engine::rendering::texture_atlas::AtlasUV;
 use crate::engine::rendering::vertex::BlockVertex;
 use crate::engine::scenes::handling::scene_trait::{Scene, SceneResources};
+use rapidhash::RapidHashMap;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
@@ -25,8 +26,8 @@ use vulkano::pipeline::graphics::viewport::Viewport;
 
 pub struct GameScene {
     pub world: Option<World>,
-    pub chunk_meshes: HashMap<[i32; 3], Option<Subbuffer<[BlockVertex]>>>,
-    block_uvs: HashMap<String, AtlasUV>,
+    pub chunk_meshes: RapidHashMap<[i32; 3], Option<Subbuffer<[BlockVertex]>>>,
+    block_uvs: RapidHashMap<String, AtlasUV>,
     last_chunk_pos: Option<[i32; 3]>,
 }
 
@@ -49,6 +50,12 @@ impl Scene for GameScene {
                 self.world.as_mut().unwrap().load_chunk(chunk_pos);
             }
         }
+
+        self.last_chunk_pos = Some(current_chunk_pos);
+
+        // println!(
+        //     "{} chunks with meshes",
+        // );
 
         self.build_all_unbuild_loaded_chunks(&self.block_uvs.clone());
     }
@@ -81,17 +88,16 @@ impl Scene for GameScene {
         };
         let pipeline = &resources.default_pipeline;
 
-        for (_pos, mesh) in &self.chunk_meshes {
-            if let Some(mesh) = mesh {
-                builder
-                    .bind_pipeline_graphics(pipeline.clone())
-                    .unwrap()
-                    .bind_vertex_buffers(0, mesh.clone())
-                    .unwrap();
+        for mesh in self.chunk_meshes.values().flatten() {
+            // using .flatten() removes all "None" from iter
+            builder
+                .bind_pipeline_graphics(pipeline.clone())
+                .unwrap()
+                .bind_vertex_buffers(0, mesh.clone())
+                .unwrap();
 
-                unsafe {
-                    builder.draw(mesh.len() as u32, 1, 0, 0).unwrap();
-                }
+            unsafe {
+                builder.draw(mesh.len() as u32, 1, 0, 0).unwrap();
             }
         }
     }
@@ -131,8 +137,8 @@ impl GameScene {
     pub fn new() -> Self {
         Self {
             world: None,
-            chunk_meshes: HashMap::new(),
-            block_uvs: HashMap::new(), // is overwritten instead of added to
+            chunk_meshes: RapidHashMap::default(),
+            block_uvs: RapidHashMap::default(), // is overwritten instead of added to
             last_chunk_pos: None,
         }
     }
@@ -194,13 +200,13 @@ impl GameScene {
         out_chunk_pos
     }
 
-    pub fn init_world(&mut self, block_uvs: &HashMap<String, AtlasUV>) {
+    pub fn init_world(&mut self, block_uvs: &RapidHashMap<String, AtlasUV>) {
         let world = self.world.as_mut().unwrap();
 
         self.build_all_loaded_chunks(block_uvs);
     }
 
-    pub fn build_all_loaded_chunks(&mut self, block_uvs: &HashMap<String, AtlasUV>) {
+    pub fn build_all_loaded_chunks(&mut self, block_uvs: &RapidHashMap<String, AtlasUV>) {
         let allocator = self
             .world
             .as_ref()
@@ -215,7 +221,7 @@ impl GameScene {
         }
     }
 
-    pub fn build_all_unbuild_loaded_chunks(&mut self, block_uvs: &HashMap<String, AtlasUV>) {
+    pub fn build_all_unbuild_loaded_chunks(&mut self, block_uvs: &RapidHashMap<String, AtlasUV>) {
         let allocator = self
             .world
             .as_ref()
@@ -233,11 +239,15 @@ impl GameScene {
         }
     }
 
-    fn load_chunk_mesh(&mut self, res: &SceneResources, chunk: Arc<Chunk>) {
+    fn load_chunk_mesh(&mut self, _res: &SceneResources, chunk: Arc<Chunk>) {
         let world = self.world.as_mut().unwrap();
         let allocator = world.memory_allocator.clone().unwrap();
 
         let out_chunk_mesh = chunk_mesh::build_chunk_mesh(allocator, &chunk, &self.block_uvs);
         self.chunk_meshes.insert(chunk.position, out_chunk_mesh);
+    }
+
+    pub fn amount_of_chunk_meshes(&self) -> usize {
+        self.chunk_meshes.values().flatten().count()
     }
 }

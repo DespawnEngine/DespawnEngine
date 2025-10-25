@@ -1,10 +1,8 @@
-use std::collections::HashMap;
+use rapidhash::RapidHashMap;
 use std::sync::Arc;
-use std::time::Instant;
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer};
 use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
 
-use crate::content::block::block::Block;
 use crate::content::world::chunks::chunk::{CHUNK_SIZE, Chunk, MAX_CHUNK_INDEX};
 use crate::engine::rendering::cube;
 use crate::engine::rendering::texture_atlas::AtlasUV;
@@ -15,10 +13,11 @@ use crate::utils::math::Vec3;
 pub fn build_chunk_mesh(
     allocator: Arc<StandardMemoryAllocator>,
     chunk: &Chunk,
-    block_uvs: &HashMap<String, AtlasUV>,
+    block_uvs: &RapidHashMap<String, AtlasUV>,
 ) -> Option<Subbuffer<[BlockVertex]>> {
-    let start_build = Instant::now();
-
+    if chunk.palette.len() == 1 {
+        return None; // early return if only air is in the palette
+    }
     let mut vertices = Vec::new();
 
     let map_uv = |orig: [f32; 2], atlas: AtlasUV| -> [f32; 2] {
@@ -107,9 +106,7 @@ pub fn build_chunk_mesh(
         }
     }
 
-    println!("it took {:?} to build the chunk", start_build.elapsed());
-
-    if vertices.len() > 0 {
+    if !vertices.is_empty() {
         Some(
             Buffer::from_iter(
                 allocator.clone(),
