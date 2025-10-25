@@ -11,6 +11,10 @@ Cargo.lock
 # OS-specific
 .DS_Store
 Thumbs.db
+perf.*
+
+flamegraph.svg
 
 atlas_debug.png
 settings.json5
+
