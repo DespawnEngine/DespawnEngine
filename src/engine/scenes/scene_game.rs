@@ -11,7 +11,7 @@ use crate::engine::rendering::texture_atlas::AtlasUV;
 use crate::engine::rendering::vertex::BlockVertex;
 use crate::engine::scenes::handling::scene_trait::{Scene, SceneResources};
 use rapidhash::RapidHashMap;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Instant;
 use vulkano::buffer::Subbuffer;
@@ -46,19 +46,41 @@ impl Scene for GameScene {
         ];
 
         if Some(current_chunk_pos) != self.last_chunk_pos {
-            for chunk_pos in GameScene::get_all_chunk_pos_in_render(camera) {
-                self.world.as_mut().unwrap().load_chunk(chunk_pos);
+            let visible_chunks = GameScene::get_all_chunk_pos_in_render(camera);
+            let visible_set: HashSet<[i32; 3]> = visible_chunks.iter().cloned().collect();
+
+            let world = self.world.as_mut().unwrap();
+            let allocator = world.memory_allocator.clone().unwrap();
+
+            // Load
+            for &chunk_pos in &visible_chunks {
+                if !world.loaded_chunks.contains_key(&chunk_pos) {
+                    world.load_chunk(chunk_pos);
+
+                    let chunk = world.loaded_chunks.get(&chunk_pos).unwrap();
+                    let mesh = chunk_mesh::build_chunk_mesh(allocator.clone(), chunk, &self.block_uvs);
+                    self.chunk_meshes.insert(chunk_pos, mesh);
+                }
             }
+
+            // Unload
+            let existing_loaded: Vec<[i32; 3]> = world.loaded_chunks.keys().cloned().collect();
+            for chunk_pos in existing_loaded {
+                if !visible_set.contains(&chunk_pos) {
+                    world.unload_chunk(chunk_pos);
+                    self.chunk_meshes.remove(&chunk_pos);
+                }
+            }
+
+            // println!(
+            //     "{} chunks with meshes",
+            // );
+            
+            //Remember the previous chunk the player was in
+            self.last_chunk_pos = Some(current_chunk_pos);
         }
-
-        self.last_chunk_pos = Some(current_chunk_pos);
-
-        // println!(
-        //     "{} chunks with meshes",
-        // );
-
-        self.build_all_unbuild_loaded_chunks(&self.block_uvs.clone());
     }
+
 
     fn fixed_update(
         &mut self,
