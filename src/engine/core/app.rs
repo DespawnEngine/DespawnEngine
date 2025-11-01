@@ -1,9 +1,7 @@
 use rapidhash::RapidHashMap;
-use std::collections::HashMap;
 use std::ops::Not;
 use std::sync::Arc;
-use std::time::{self, Instant};
-use vulkano::image::{ImageType, sampler};
+use std::time::Instant;
 
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
 use vulkano::descriptor_set::DescriptorSet;
@@ -59,20 +57,9 @@ use crate::engine::rendering::{
 use crate::engine::scenes::handling::scene_manager::SceneManager;
 use crate::engine::ui::egui_integration::EguiStruct;
 
-use crate::content::block::block::Block;
 use crate::engine::core::content_loader::GameContent;
-use crate::engine::rendering::texture_atlas::{AtlasUV, TextureAtlas};
-use crate::engine::resources::load_json5_dir;
+use crate::engine::rendering::texture_atlas::AtlasUV;
 use crate::engine::scenes::handling::scene_trait::SceneResources;
-use crate::utils::registry::Registry;
-use image::io::Reader as ImageReader;
-use std::io::Cursor;
-use vulkano::command_buffer::CopyBufferToImageInfo;
-use vulkano::format::Format;
-use vulkano::image::ImageCreateInfo;
-use vulkano::image::ImageUsage;
-use vulkano::image::sampler::{Filter, Sampler, SamplerCreateInfo};
-use vulkano::image::view::ImageView;
 
 //
 // `App` holds the state of the application, including all Vulkan objects that need to persist between frames.
@@ -194,7 +181,7 @@ impl App {
         let atlas = crate::engine::rendering::texture_atlas::TextureAtlas::generate(
             memory_allocator.clone(),
             queue.clone(),
-            &self.content.as_ref().unwrap(),
+            self.content.as_ref().unwrap(),
         );
         self.texture = Some(atlas.image_view.clone());
         self.sampler = Some(atlas.sampler.clone());

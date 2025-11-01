@@ -1,12 +1,12 @@
 use std::sync::Arc;
 use vulkano::{
+    VulkanLibrary,
     device::{
-        physical::PhysicalDeviceType,
         Device, DeviceCreateInfo, DeviceExtensions, Queue, QueueCreateInfo, QueueFlags,
+        physical::PhysicalDeviceType,
     },
     instance::{Instance, InstanceCreateFlags, InstanceCreateInfo},
     swapchain::Surface,
-    VulkanLibrary,
 };
 use winit::event_loop::ActiveEventLoop;
 

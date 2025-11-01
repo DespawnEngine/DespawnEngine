@@ -1,28 +1,28 @@
-use std::sync::{Arc, Mutex, OnceLock};
-use vulkano::command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer};
+use crate::engine::core::input::InputState;
+use crate::engine::rendering::camera::Camera;
 use crate::engine::scenes::handling::scene_trait::{Scene, SceneResources};
 use crate::engine::scenes::handling::scene_types::SceneType;
 use crate::engine::scenes::scene_game::GameScene;
 use crate::engine::scenes::scene_menu::MenuScene;
-use crate::engine::core::input::InputState;
-use crate::engine::rendering::camera::Camera;
-use vulkano::memory::allocator::StandardMemoryAllocator;
+use std::sync::{Arc, Mutex, OnceLock};
+use vulkano::command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer};
 use vulkano::descriptor_set::DescriptorSet;
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::descriptor_set::layout::DescriptorSetLayout;
 use vulkano::image::sampler::Sampler;
 use vulkano::image::view::ImageView;
+use vulkano::memory::allocator::StandardMemoryAllocator;
 use vulkano::pipeline::graphics::viewport::Viewport;
 
 #[derive(Clone)]
-pub struct SceneManager
-{
+pub struct SceneManager {
     scenes: Arc<Mutex<Vec<(SceneType, Box<dyn Scene + Send>)>>>,
     current_scene: Arc<Mutex<Option<SceneType>>>,
     next_scene: Arc<Mutex<Option<SceneType>>>,
     scene_resources: Arc<Mutex<Option<SceneResources>>>,
 }
 
+#[rustfmt::skip]
 impl SceneManager
 {
     pub fn new() -> Self {

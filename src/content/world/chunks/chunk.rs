@@ -6,21 +6,23 @@ use std::sync::Arc;
 /// Single chunk dimensions (16^3 because cubic)
 pub const CHUNK_SIZE: usize = 16;
 
-pub const MAX_CHUNK_INDEX: usize = 4095;
+pub const BLOCKS_IN_CHUNK: usize = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE;
 
 /// Hardcoded ID for air (palette index 0)
 pub const AIR_BLOCK_ID: &str = "base:air";
 
+pub type ChunkCoords = [i32; 3]; // X Y Z
+
 #[derive(Clone)]
 pub struct Chunk {
-    pub position: [i32; 3],
+    pub position: ChunkCoords,
     pub blocks: Vec<u16>,                  // block palette indices
     pub palette: Vec<String>,              // palette: index -> block ID
     pub palette_map: HashMap<String, u16>, // block ID -> palette index
 }
 
 impl Chunk {
-    pub fn new(position: [i32; 3]) -> Self {
+    pub fn new(position: ChunkCoords) -> Self {
         let mut palette = Vec::new();
         let mut palette_map = HashMap::new();
 
@@ -30,7 +32,7 @@ impl Chunk {
 
         Self {
             position,
-            blocks: vec![0; CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE],
+            blocks: vec![0; BLOCKS_IN_CHUNK],
             palette,
             palette_map,
         }

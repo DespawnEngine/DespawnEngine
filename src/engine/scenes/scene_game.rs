@@ -1,6 +1,6 @@
 use crate::content::world;
-use crate::content::world::chunks::chunk::{self, CHUNK_SIZE, Chunk};
-use crate::content::world::chunks::chunk_mesh;
+use crate::content::world::chunks::chunk::{self, BLOCKS_IN_CHUNK, CHUNK_SIZE, Chunk, ChunkCoords};
+use crate::content::world::chunks::chunk_mesh::{self, ChunkMesh};
 use crate::content::world::world::World;
 use crate::engine::core::content_loader::GameContent;
 use crate::engine::core::input::InputState;
@@ -14,21 +14,39 @@ use rapidhash::RapidHashMap;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Instant;
-use vulkano::buffer::Subbuffer;
+use vulkano::buffer::allocator::{SubbufferAllocator, SubbufferAllocatorCreateInfo};
+use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer, subbuffer};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer};
 use vulkano::descriptor_set::DescriptorSet;
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::descriptor_set::layout::DescriptorSetLayout;
 use vulkano::image::sampler::Sampler;
 use vulkano::image::view::ImageView;
-use vulkano::memory::allocator::StandardMemoryAllocator;
+use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
+use vulkano::pipeline::graphics::input_assembly::PrimitiveTopology;
 use vulkano::pipeline::graphics::viewport::Viewport;
 
 pub struct GameScene {
     pub world: Option<World>,
-    pub chunk_meshes: RapidHashMap<[i32; 3], Option<Subbuffer<[BlockVertex]>>>,
+    pub chunk_meshes: RapidHashMap<ChunkCoords, Option<ChunkMesh>>,
+    chunk_vertex_buffers: RapidHashMap<ChunkCoords, Subbuffer<[BlockVertex]>>,
+
+    chunk_vertex_buffer_allocator: Option<SubbufferAllocator>,
+
+    /* idk where a place for this can go lol
+    *
+    let chunk_vertex_buffer_allocator = Some(SubbufferAllocator::new(
+            allocator,
+            SubbufferAllocatorCreateInfo {
+                buffer_usage: BufferUsage::VERTEX_BUFFER,
+                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                    | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                ..Default::default()
+            },
+        ));
+    */
     block_uvs: RapidHashMap<String, AtlasUV>,
-    last_chunk_pos: Option<[i32; 3]>,
+    current_chunk_pos: Option<ChunkCoords>,
 }
 
 impl Scene for GameScene {
@@ -39,32 +57,32 @@ impl Scene for GameScene {
     fn update(&mut self, delta_time: f32, input_state: &mut InputState, camera: &mut Camera) {
         camera.update(delta_time, input_state);
         let camera_pos = camera.position;
-        let current_chunk_pos: [i32; 3] = [
+        let current_chunk_pos: ChunkCoords = [
             (camera_pos[0] as i32).div_euclid(CHUNK_SIZE as i32),
             (camera_pos[1] as i32).div_euclid(CHUNK_SIZE as i32),
             (camera_pos[2] as i32).div_euclid(CHUNK_SIZE as i32),
         ];
 
-        if Some(current_chunk_pos) != self.last_chunk_pos {
+        // self.current_chunk_pos is unupdated at this point, so really its "last_chunk_pos"
+        if Some(current_chunk_pos) != self.current_chunk_pos {
             let visible_chunks = GameScene::get_all_chunk_pos_in_render(camera);
-            let visible_set: HashSet<[i32; 3]> = visible_chunks.iter().cloned().collect();
+            let visible_set: HashSet<ChunkCoords> = visible_chunks.iter().cloned().collect();
 
             let world = self.world.as_mut().unwrap();
             let allocator = world.memory_allocator.clone().unwrap();
 
-            // Load
             for &chunk_pos in &visible_chunks {
                 if !world.loaded_chunks.contains_key(&chunk_pos) {
                     world.load_chunk(chunk_pos);
 
                     let chunk = world.loaded_chunks.get(&chunk_pos).unwrap();
-                    let mesh = chunk_mesh::build_chunk_mesh(allocator.clone(), chunk, &self.block_uvs);
+                    let mesh =
+                        chunk_mesh::build_chunk_mesh(allocator.clone(), chunk, &self.block_uvs);
                     self.chunk_meshes.insert(chunk_pos, mesh);
                 }
             }
 
-            // Unload
-            let existing_loaded: Vec<[i32; 3]> = world.loaded_chunks.keys().cloned().collect();
+            let existing_loaded: Vec<ChunkCoords> = world.loaded_chunks.keys().cloned().collect();
             for chunk_pos in existing_loaded {
                 if !visible_set.contains(&chunk_pos) {
                     world.unload_chunk(chunk_pos);
@@ -72,15 +90,11 @@ impl Scene for GameScene {
                 }
             }
 
-            // println!(
-            //     "{} chunks with meshes",
-            // );
-            
-            //Remember the previous chunk the player was in
-            self.last_chunk_pos = Some(current_chunk_pos);
+            self.current_chunk_pos = Some(current_chunk_pos);
+
+            // self.update_chunk_vertex_buffers();
         }
     }
-
 
     fn fixed_update(
         &mut self,
@@ -110,16 +124,24 @@ impl Scene for GameScene {
         };
         let pipeline = &resources.default_pipeline;
 
-        for mesh in self.chunk_meshes.values().flatten() {
-            // using .flatten() removes all "None" from iter
+        let vtx_buffers: Vec<Subbuffer<[BlockVertex]>> =
+            self.chunk_vertex_buffers.values().cloned().collect();
+
+        let mut vertex_count: u32 = 0;
+
+        for buf in vtx_buffers.as_slice() {
+            vertex_count += buf.len() as u32;
+        }
+
+        if !vtx_buffers.is_empty() {
             builder
                 .bind_pipeline_graphics(pipeline.clone())
                 .unwrap()
-                .bind_vertex_buffers(0, mesh.clone())
+                .bind_vertex_buffers(0, vtx_buffers)
                 .unwrap();
 
             unsafe {
-                builder.draw(mesh.len() as u32, 1, 0, 0).unwrap();
+                builder.draw(vertex_count, 1, 0, 0).unwrap();
             }
         }
     }
@@ -159,31 +181,79 @@ impl GameScene {
     pub fn new() -> Self {
         Self {
             world: None,
+            chunk_vertex_buffer_allocator: None,
             chunk_meshes: RapidHashMap::default(),
             block_uvs: RapidHashMap::default(), // is overwritten instead of added to
-            last_chunk_pos: None,
+            chunk_vertex_buffers: RapidHashMap::default(),
+            current_chunk_pos: None,
+        }
+    }
+
+    fn update_chunk_vertex_buffers(&mut self) {
+        // let horizontal_render_distance = UserSettings::instance().horizontal_render_distance;
+        // let vertical_render_distance = UserSettings::instance().vertical_render_distance;
+
+        let subbuffer_allocator = self.chunk_vertex_buffer_allocator.as_mut().unwrap();
+
+        let chunk_meshes = self
+            .chunk_meshes
+            .iter()
+            .filter(|(_chunk_pos, chunk_mesh)| chunk_mesh.is_some());
+
+        for (chunk_pos, chunk_mesh) in chunk_meshes {
+            if let Some(chunk_mesh) = chunk_mesh {
+                //
+                // let mut verticies: Vec<BlockVertex> = vec![];
+                let mut verticies: Vec<BlockVertex> = vec![];
+                // let chunk_x_pos = chunk_pos[0];
+                // let chunk_y_pos = chunk_pos[1];
+                // let chunk_z_pos = chunk_pos[2];
+
+                verticies.append(&mut chunk_mesh.y_pos.clone());
+                verticies.append(&mut chunk_mesh.z_pos.clone());
+
+                verticies.append(&mut chunk_mesh.x_neg.clone());
+                verticies.append(&mut chunk_mesh.y_neg.clone());
+                verticies.append(&mut chunk_mesh.z_neg.clone());
+
+                let buff_size = (verticies.len() * size_of::<BlockVertex>()) as u64;
+
+                let subbuffer: Subbuffer<[BlockVertex]> =
+                    subbuffer_allocator.allocate_slice(buff_size).unwrap();
+
+                // copied
+                // https://docs.rs/vulkano/latest/src/vulkano/buffer/mod.rs.html#268-296
+                // because man this is giving me a headache
+                let mut write_guard = subbuffer.write().unwrap();
+
+                for (o, i) in write_guard.iter_mut().zip(verticies) {
+                    *o = i;
+                }
+                self.chunk_vertex_buffers
+                    .insert(*chunk_pos, subbuffer.clone());
+            }
         }
     }
 
     // there has got to be a better way to find if a point on a grid is within a radius of
     // another point on a grid (hori)
-    fn get_all_chunk_pos_in_render(camera: &Camera) -> Vec<[i32; 3]> {
+    fn get_all_chunk_pos_in_render(camera: &Camera) -> Vec<ChunkCoords> {
         let start_time = Instant::now();
         let settings = UserSettings::instance();
         let vert_dist = settings.vertical_render_distance;
         let hori_dist = settings.horizontal_render_distance;
 
         let camera_pos = camera.position;
-        let current_chunk_pos: [i32; 3] = [
+        let current_chunk_pos: ChunkCoords = [
             (camera_pos[0] as i32).div_euclid(CHUNK_SIZE as i32),
             (camera_pos[1] as i32).div_euclid(CHUNK_SIZE as i32),
             (camera_pos[2] as i32).div_euclid(CHUNK_SIZE as i32),
         ];
 
-        let is_in_vert = |chunk_pos: [i32; 3]| -> bool {
+        let is_in_vert = |chunk_pos: ChunkCoords| -> bool {
             (chunk_pos[1]).abs_diff(current_chunk_pos[1]) <= vert_dist
         };
-        let is_in_hori = |chunk_pos: [i32; 3]| -> bool {
+        let is_in_hori = |chunk_pos: ChunkCoords| -> bool {
             let abs_x_diff = (chunk_pos[0]).abs_diff(current_chunk_pos[0]);
             let abs_z_diff = (chunk_pos[2]).abs_diff(current_chunk_pos[2]);
 
@@ -191,7 +261,7 @@ impl GameScene {
         };
 
         let is_in_render =
-            |chunk_pos: [i32; 3]| -> bool { is_in_vert(chunk_pos) && is_in_hori(chunk_pos) };
+            |chunk_pos: ChunkCoords| -> bool { is_in_vert(chunk_pos) && is_in_hori(chunk_pos) };
 
         let max_chunk_x = current_chunk_pos[0] + hori_dist as i32;
         let min_chunk_x = current_chunk_pos[0] - hori_dist as i32;
@@ -202,7 +272,7 @@ impl GameScene {
         let max_chunk_y = current_chunk_pos[1] + vert_dist as i32;
         let min_chunk_y = current_chunk_pos[1] - vert_dist as i32;
 
-        let mut out_chunk_pos: Vec<[i32; 3]> = vec![];
+        let mut out_chunk_pos: Vec<ChunkCoords> = vec![];
         for chunk_x_pos in min_chunk_x - 1..max_chunk_x + 1 {
             for chunk_y_pos in min_chunk_y - 1..max_chunk_y + 1 {
                 for chunk_z_pos in min_chunk_z - 1..max_chunk_z + 1 {
@@ -223,7 +293,7 @@ impl GameScene {
     }
 
     pub fn init_world(&mut self, block_uvs: &RapidHashMap<String, AtlasUV>) {
-        let world = self.world.as_mut().unwrap();
+        let _world = self.world.as_mut().unwrap();
 
         self.build_all_loaded_chunks(block_uvs);
     }
@@ -237,8 +307,7 @@ impl GameScene {
             .clone()
             .unwrap();
         for (chunk_pos, chunk) in &self.world.as_ref().unwrap().loaded_chunks {
-            let out_chunk_mesh =
-                chunk_mesh::build_chunk_mesh(allocator.clone(), &chunk, &block_uvs);
+            let out_chunk_mesh = chunk_mesh::build_chunk_mesh(allocator.clone(), chunk, block_uvs);
             self.chunk_meshes.insert(*chunk_pos, out_chunk_mesh);
         }
     }
@@ -270,6 +339,9 @@ impl GameScene {
     }
 
     pub fn amount_of_chunk_meshes(&self) -> usize {
+        self.chunk_meshes.values().flatten().count()
+    }
+    pub fn amount_of_cached_chunk_meshes(&self) -> usize {
         self.chunk_meshes.values().flatten().count()
     }
 }

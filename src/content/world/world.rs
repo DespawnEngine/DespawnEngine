@@ -32,7 +32,6 @@ impl World {
 
         let mut chunk = Chunk::new(pos);
 
-        // Fill bottom half with dirt from registry
         if pos[1] > 0 {
             chunk.generate_empty(content);
         } else if pos[1] == 0 {
