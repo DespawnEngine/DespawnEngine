@@ -2,7 +2,6 @@ use crate::content::block::block::Block;
 use crate::engine::core::content_loader::GameContent;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Instant;
 
 /// Single chunk dimensions (16^3 because cubic)
 pub const CHUNK_SIZE: usize = 16;
@@ -100,10 +99,30 @@ impl Chunk {
         }
     }
 
+    pub fn generate_full(&mut self, dirt_id: &str, _content: &GameContent) {
+        for x in 0..CHUNK_SIZE {
+            for y in 0..CHUNK_SIZE {
+                for z in 0..CHUNK_SIZE {
+                    self.set_block(x, y, z, dirt_id);
+                }
+            }
+        }
+    }
+
+    pub fn generate_empty(&mut self, _content: &GameContent) {
+        for x in 0..CHUNK_SIZE {
+            for y in 0..CHUNK_SIZE {
+                for z in 0..CHUNK_SIZE {
+                    self.set_block(x, y, z, AIR_BLOCK_ID);
+                }
+            }
+        }
+    }
+
     /// Prints the chunk layer by layer (shows block IDs)
     pub fn print_layers(&self) {
         for y in (0..CHUNK_SIZE).rev() {
-            println!("Layer y={}", y);
+            println!("Layer y={y}");
             for z in 0..CHUNK_SIZE {
                 for x in 0..CHUNK_SIZE {
                     let palette_idx = self.blocks[Self::index(x, y, z)] as usize;
@@ -112,7 +131,7 @@ impl Chunk {
                         .get(palette_idx)
                         .cloned()
                         .unwrap_or_else(|| ".".to_string());
-                    print!("{:>15} ", id_str);
+                    print!("{id_str:>15} ");
                 }
                 println!();
             }

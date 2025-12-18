@@ -1,14 +1,15 @@
-use std::collections::HashMap;
-use std::sync::Arc;
-use image::{RgbaImage, GenericImage, GenericImageView};
-use vulkano::device::{DeviceOwned, Queue};
-use vulkano::image::{Image, ImageCreateInfo, ImageType, ImageUsage};
-use vulkano::image::view::ImageView;
-use vulkano::memory::allocator::{StandardMemoryAllocator, AllocationCreateInfo, MemoryTypeFilter};
-use vulkano::format::Format;
-use vulkano::image::sampler::Sampler;
 use crate::content::block::block::{Block, BlockModel};
 use crate::engine::core::content_loader::GameContent;
+use image::{GenericImage, GenericImageView, RgbaImage};
+use rapidhash::RapidHashMap;
+use std::collections::HashMap;
+use std::sync::Arc;
+use vulkano::device::{DeviceOwned, Queue};
+use vulkano::format::Format;
+use vulkano::image::sampler::Sampler;
+use vulkano::image::view::ImageView;
+use vulkano::image::{Image, ImageCreateInfo, ImageType, ImageUsage};
+use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
 
 /// UV mapping for one block in the atlas
 #[derive(Debug, Clone, Copy)]
@@ -21,7 +22,7 @@ pub struct AtlasUV {
 pub struct TextureAtlas {
     pub image_view: Arc<ImageView>,
     pub sampler: Arc<Sampler>,
-    pub block_uvs: HashMap<String, AtlasUV>,
+    pub block_uvs: RapidHashMap<String, AtlasUV>,
 }
 
 impl TextureAtlas {
@@ -45,7 +46,9 @@ impl TextureAtlas {
             if let Some(state) = &block.block_states.default {
                 if let Some(model) = &state.model {
                     // Use texture key "all" first, otherwise the first texture
-                    let tex_entry = model.textures.get("all")
+                    let tex_entry = model
+                        .textures
+                        .get("all")
                         .or_else(|| model.textures.values().next());
 
                     if let Some(tex) = tex_entry {
@@ -71,7 +74,7 @@ impl TextureAtlas {
         // Create empty atlas and fill it
         let mut atlas = RgbaImage::new(atlas_width, atlas_height);
 
-        let mut block_uvs = HashMap::new();
+        let mut block_uvs = RapidHashMap::default();
 
         // Paste each block image into atlas
         for (i, (id, img)) in images.iter().enumerate() {
@@ -81,7 +84,10 @@ impl TextureAtlas {
             atlas.copy_from(img, x, y).unwrap();
 
             // Normalized UVs
-            let uv_min = [x as f32 / atlas_width as f32, y as f32 / atlas_height as f32];
+            let uv_min = [
+                x as f32 / atlas_width as f32,
+                y as f32 / atlas_height as f32,
+            ];
             let uv_max = [
                 (x + tile_size) as f32 / atlas_width as f32,
                 (y + tile_size) as f32 / atlas_height as f32,
@@ -98,11 +104,11 @@ impl TextureAtlas {
 
         use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage};
         use vulkano::command_buffer::{
-            allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage,
-            CopyBufferToImageInfo,
+            AutoCommandBufferBuilder, CommandBufferUsage, CopyBufferToImageInfo,
+            allocator::StandardCommandBufferAllocator,
         };
+        use vulkano::image::sampler::{Filter, Sampler, SamplerAddressMode, SamplerCreateInfo};
         use vulkano::sync::{self, GpuFuture};
-        use vulkano::image::sampler::{Sampler, SamplerCreateInfo, Filter, SamplerAddressMode};
 
         let texture_image = Image::new(
             allocator.clone(),
@@ -118,7 +124,7 @@ impl TextureAtlas {
                 ..Default::default()
             },
         )
-            .unwrap();
+        .unwrap();
 
         let staging = Buffer::from_iter(
             allocator.clone(),
@@ -133,7 +139,7 @@ impl TextureAtlas {
             },
             img_data,
         )
-            .unwrap();
+        .unwrap();
 
         // Allocate command buffer properly
         let command_allocator = Arc::new(StandardCommandBufferAllocator::new(
@@ -146,7 +152,7 @@ impl TextureAtlas {
             queue.queue_family_index(),
             CommandBufferUsage::OneTimeSubmit,
         )
-            .unwrap();
+        .unwrap();
 
         builder
             .copy_buffer_to_image(CopyBufferToImageInfo::buffer_image(
@@ -181,14 +187,13 @@ impl TextureAtlas {
                 ..Default::default()
             },
         )
-            .unwrap();
-
+        .unwrap();
 
         println!(
             "Texture Atlas uploaded to GPU ({}x{} tiles), sampler created.",
             atlas_width, atlas_height
         );
-        
+
         Self {
             image_view,
             sampler,

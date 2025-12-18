@@ -1,3 +1,4 @@
+use rapidhash::RapidHashMap;
 use std::collections::HashMap;
 use std::ops::Not;
 use std::sync::Arc;
@@ -53,19 +54,19 @@ use crate::engine::rendering::vswapchain::{create_swapchain, window_size_depende
 use crate::engine::rendering::vulkan::{create_device_and_queue, create_instance};
 use crate::engine::rendering::{
     camera::Camera,
-    display::{create_main_window, create_render_pass, create_vertex_buffer},
+    display::{create_main_window, create_render_pass},
 };
 use crate::engine::scenes::handling::scene_manager::SceneManager;
 use crate::engine::ui::egui_integration::EguiStruct;
 
 use crate::content::block::block::Block;
 use crate::engine::core::content_loader::GameContent;
+use crate::engine::rendering::texture_atlas::{AtlasUV, TextureAtlas};
 use crate::engine::resources::load_json5_dir;
 use crate::engine::scenes::handling::scene_trait::SceneResources;
 use crate::utils::registry::Registry;
 use image::io::Reader as ImageReader;
 use std::io::Cursor;
-use crate::engine::rendering::texture_atlas::{AtlasUV, TextureAtlas};
 use vulkano::command_buffer::CopyBufferToImageInfo;
 use vulkano::format::Format;
 use vulkano::image::ImageCreateInfo;
@@ -88,7 +89,6 @@ pub struct App {
     recreate_swapchain: bool,
     previous_frame_end: Option<Box<dyn GpuFuture>>,
     command_buffer_allocator: Option<Arc<StandardCommandBufferAllocator>>,
-    vertex_buffer: Option<Subbuffer<[BlockVertex]>>,
     pipeline: Option<Arc<GraphicsPipeline>>,
     egui: Option<EguiStruct>,
     mvp_buffer: Option<Subbuffer<MVP>>,
@@ -104,7 +104,7 @@ pub struct App {
     texture: Option<Arc<vulkano::image::view::ImageView>>,
     sampler: Option<Arc<vulkano::image::sampler::Sampler>>,
     pub content: Option<Arc<GameContent>>,
-    pub block_uvs: Option<HashMap<String, AtlasUV>>,
+    pub block_uvs: Option<RapidHashMap<String, AtlasUV>>,
 }
 
 impl Default for App {
@@ -126,7 +126,6 @@ impl Default for App {
             recreate_swapchain: false,
             previous_frame_end: None,
             command_buffer_allocator: None,
-            vertex_buffer: None,
             pipeline: None,
             egui: None,
             mvp_buffer: None,
@@ -201,10 +200,7 @@ impl App {
         self.sampler = Some(atlas.sampler.clone());
         self.block_uvs = Some(atlas.block_uvs.clone());
 
-        let vertex_buffer = create_vertex_buffer(memory_allocator.clone());
-        self.vertex_buffer = Some(vertex_buffer);
-
-        self.camera = Some(Camera::from_pos(2.5, -2.5, 2.5));
+        self.camera = Some(Camera::from_pos(2.5, 22.5, -2.5));
 
         let mvp_buffer = Buffer::from_data(
             memory_allocator.clone(),
@@ -668,8 +664,6 @@ impl ApplicationHandler for App {
                     .unwrap()
                     .bind_pipeline_graphics(self.pipeline.as_ref().unwrap().clone())
                     .unwrap()
-                    .bind_vertex_buffers(0, self.vertex_buffer.as_ref().unwrap().clone())
-                    .unwrap()
                     .bind_descriptor_sets(
                         vulkano::pipeline::PipelineBindPoint::Graphics,
                         self.pipeline.as_ref().unwrap().layout().clone(),
@@ -677,13 +671,6 @@ impl ApplicationHandler for App {
                         set.clone(),
                     )
                     .unwrap();
-
-                // Wrap the draw call in an unsafe block so it works :|
-                unsafe {
-                    cmd_buffer_builder
-                        .draw(self.vertex_buffer.as_ref().unwrap().len() as u32, 1, 0, 0)
-                        .unwrap();
-                }
 
                 // Do scene manager lifecycle draw
                 if let (Some(scene_manager), Some(memory_allocator)) =

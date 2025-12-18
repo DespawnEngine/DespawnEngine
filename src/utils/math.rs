@@ -1,4 +1,5 @@
 use std::f32::consts::PI;
+use std::ops::Add;
 use std::ops::AddAssign;
 use std::ops::Div;
 use std::ops::Index;
@@ -64,6 +65,16 @@ impl Quat {
     }
 }
 
+impl Vec3 {
+    pub fn int_div(self, rhs: i32) -> [i32; 3] {
+        [
+            self.0[0] as i32 / rhs,
+            self.0[1] as i32 / rhs,
+            self.0[2] as i32 / rhs,
+        ]
+    }
+}
+
 impl Default for Mat4 {
     fn default() -> Self {
         Mat4::IDENTITY
@@ -121,6 +132,12 @@ impl From<[f32; 3]> for Vec3 {
     }
 }
 
+impl From<[i32; 3]> for Vec3 {
+    fn from(value: [i32; 3]) -> Self {
+        Vec3([value[0] as f32, value[1] as f32, value[2] as f32])
+    }
+}
+
 impl From<glam_vec3> for Vec3 {
     fn from(value: glam_vec3) -> Self {
         Vec3(value.to_array())
@@ -132,6 +149,24 @@ impl AddAssign for Vec3 {
         self.0[0] += rhs.0[0];
         self.0[1] += rhs.0[1];
         self.0[2] += rhs.0[2];
+    }
+}
+
+impl Add for Vec3 {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self::Output {
+        Vec3([
+            self.0[0] + rhs.0[0],
+            self.0[1] + rhs.0[1],
+            self.0[2] + rhs.0[2],
+        ])
+    }
+}
+
+impl Mul<f32> for Vec3 {
+    type Output = Self;
+    fn mul(self, rhs: f32) -> Self::Output {
+        Vec3([self.0[0] * rhs, self.0[1] * rhs, self.0[2] * rhs])
     }
 }
 
