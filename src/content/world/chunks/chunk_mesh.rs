@@ -1,5 +1,6 @@
 use rapidhash::RapidHashMap;
 use std::sync::Arc;
+use std::time::Instant;
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer};
 use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
 
@@ -39,6 +40,9 @@ pub fn build_chunk_mesh(
     if chunk.palette.len() == 1 {
         return None; // early return if only air is in the palette
     }
+
+    let start_time = Instant::now();
+
     let mut chunk_mesh = ChunkMesh::default();
 
     let map_uv = |orig: [f32; 2], atlas: AtlasUV| -> [f32; 2] {
@@ -51,17 +55,20 @@ pub fn build_chunk_mesh(
     let is_air = |idx: usize| chunk.is_air_at_idx(idx);
 
     for idx in 0..BLOCKS_IN_CHUNK {
-        let palette_idx = chunk.blocks[idx] as usize;
-        let block_id = &chunk.palette[palette_idx];
-
         if chunk.is_air_at_idx(idx) {
             continue;
         }
+
+        let palette_idx = chunk.blocks[idx] as usize;
+        let block_id = &chunk.palette[palette_idx];
 
         // deriving the coords instead of nested loops
         let x = idx % CHUNK_SIZE;
         let y = (idx / CHUNK_SIZE) % CHUNK_SIZE;
         let z = idx / (CHUNK_SIZE * CHUNK_SIZE);
+
+        // if this ever fails, math has somehow broken.
+        debug_assert!(Chunk::index(x, y, z) == idx);
 
         // Precompute neighbor "air" checks
         let top_air = y == CHUNK_SIZE - 1 || is_air(idx + CHUNK_SIZE); // y+
@@ -77,9 +84,6 @@ pub fn build_chunk_mesh(
             uv_min: [0.0, 0.0],
             uv_max: [1.0, 1.0],
         });
-
-        // if this ever fails, math has somehow broken.
-        debug_assert!(Chunk::index(x, y, z) == idx);
 
         let pos_offset = Vec3::from([x as f32, y as f32, z as f32])
             + (Vec3::from(chunk.position) * CHUNK_SIZE as f32);
@@ -130,6 +134,8 @@ pub fn build_chunk_mesh(
             }));
         }
     }
+
+    println!("It took {:?} to gen the chunk mesh", start_time.elapsed());
 
     if !chunk_mesh.is_empty() {
         Some(chunk_mesh)
