@@ -18,4 +18,8 @@ impl BlockVertex {
             tex_coords: uv,
         }
     }
+    pub const ZERO: BlockVertex = BlockVertex {
+        position: Vec3([0.0; 3]),
+        tex_coords: [0.0, 1.0],
+    };
 }

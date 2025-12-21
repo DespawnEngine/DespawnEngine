@@ -33,7 +33,7 @@ pub struct GameScene {
     pub chunk_meshes: RapidHashMap<ChunkCoords, Option<ChunkMesh>>,
     chunk_vertex_buffers: RapidHashMap<ChunkCoords, Subbuffer<[BlockVertex]>>,
 
-    chunk_vertex_buffer_allocator: Option<SubbufferAllocator>,
+    memory_allocator: Option<Arc<StandardMemoryAllocator>>,
     max_buffer_size: Option<DeviceSize>,
 
     block_uvs: RapidHashMap<String, AtlasUV>,
@@ -124,10 +124,10 @@ impl Scene for GameScene {
         let vtx_buffers: Vec<Subbuffer<[BlockVertex]>> =
             self.chunk_vertex_buffers.values().cloned().collect();
 
-        println!(
-            "there are {} bufs, chunked into chunks of {max_vertex_input_bindings}",
-            vtx_buffers.iter().len()
-        );
+        // println!(
+        //     "there are {} bufs, chunked into chunks of {max_vertex_input_bindings}",
+        //     vtx_buffers.iter().len()
+        // );
 
         if !vtx_buffers.is_empty() {
             for buffer in vtx_buffers {
@@ -168,16 +168,8 @@ impl Scene for GameScene {
     fn inject_resources(&mut self, res: &SceneResources) {
         println!("injecting resources into game scene");
 
-        if self.chunk_vertex_buffer_allocator.is_none() {
-            self.chunk_vertex_buffer_allocator = Some(SubbufferAllocator::new(
-                res.memory_allocator.clone(),
-                SubbufferAllocatorCreateInfo {
-                    buffer_usage: BufferUsage::VERTEX_BUFFER,
-                    memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
-                        | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
-                    ..Default::default()
-                },
-            ));
+        if self.memory_allocator.is_none() {
+            self.memory_allocator = Some(res.memory_allocator.clone());
         }
         if self.max_buffer_size.is_none() {
             self.max_buffer_size = res
@@ -186,7 +178,7 @@ impl Scene for GameScene {
                 .device()
                 .physical_device()
                 .properties()
-                .max_buffer_size;
+                .max_memory_allocation_size;
         }
 
         if self.world.is_none() {
@@ -205,7 +197,7 @@ impl GameScene {
     pub fn new() -> Self {
         Self {
             world: None,
-            chunk_vertex_buffer_allocator: None,
+            memory_allocator: None,
             max_buffer_size: None,
             chunk_meshes: RapidHashMap::default(),
             block_uvs: RapidHashMap::default(), // is overwritten instead of added to
@@ -218,9 +210,16 @@ impl GameScene {
         // let horizontal_render_distance = UserSettings::instance().horizontal_render_distance;
         // let vertical_render_distance = UserSettings::instance().vertical_render_distance;
 
-        self.chunk_vertex_buffers.clear();
+        for (_pos, buff) in self.chunk_vertex_buffers.clone() {
+            // let mut write_guard = buff.write().unwrap();
 
-        let subbuffer_allocator = self.chunk_vertex_buffer_allocator.as_mut().unwrap();
+            drop(buff);
+
+            // for o in write_guard.iter_mut() {
+            //     *o = BlockVertex::ZERO;
+            // }
+        }
+        self.chunk_vertex_buffers.clear();
 
         let chunk_meshes = self
             .chunk_meshes
@@ -232,6 +231,16 @@ impl GameScene {
         let current_chunk_pos = self
             .current_chunk_pos
             .expect("Not currently in a chunk? What!");
+
+        let chunk_vertex_buffer_create_info = BufferCreateInfo {
+            usage: BufferUsage::VERTEX_BUFFER,
+            ..Default::default()
+        };
+        let chunk_vertex_buffer_allocation_info = AllocationCreateInfo {
+            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+            ..Default::default()
+        };
 
         let mut temp_final_chunk_pos = None;
 
@@ -264,30 +273,31 @@ impl GameScene {
                     chunk_verticies.append(&mut chunk_mesh.z_neg.clone());
                 }
 
-                // println!(
-                //     "current size of {}, max of {}",
-                //     (chunk_verticies.len() + verticies.len()) * 3 * size_of::<BlockVertex>(),
-                //     self.max_buffer_size.unwrap()
-                // );
+                println!(
+                    "current size of {}, max of {}",
+                    (chunk_verticies.len() + verticies.len()) * 3 * size_of::<BlockVertex>(),
+                    self.max_buffer_size.unwrap()
+                );
 
                 if ((chunk_verticies.len() + verticies.len()) * 300 * size_of::<BlockVertex>())
                     < self.max_buffer_size.unwrap() as usize
                 {
                     verticies.append(&mut chunk_verticies);
                 } else {
-                    let buff_size = (verticies.len() * size_of::<BlockVertex>()) as u64;
+                    // let buff_size = (verticies.len() * size_of::<BlockVertex>()) as u64;
 
-                    let subbuffer: Subbuffer<[BlockVertex]> =
-                        subbuffer_allocator.allocate_slice(buff_size).unwrap();
+                    let subbuffer: Subbuffer<[BlockVertex]> = Buffer::from_iter(
+                        self.memory_allocator.clone().unwrap(),
+                        chunk_vertex_buffer_create_info.clone(),
+                        chunk_vertex_buffer_allocation_info.clone(),
+                        verticies,
+                    )
+                    .unwrap();
 
                     // copied
                     // https://docs.rs/vulkano/latest/src/vulkano/buffer/mod.rs.html#268-296
                     // because man this is giving me a headache
-                    let mut write_guard = subbuffer.write().unwrap();
 
-                    for (o, i) in write_guard.iter_mut().zip(verticies) {
-                        *o = i;
-                    }
                     verticies = chunk_verticies;
 
                     self.chunk_vertex_buffers
@@ -296,19 +306,19 @@ impl GameScene {
             }
         }
         if let Some(last_chunk_pos) = temp_final_chunk_pos {
-            let buff_size = (verticies.len() * size_of::<BlockVertex>()) as u64;
-
-            let subbuffer: Subbuffer<[BlockVertex]> =
-                subbuffer_allocator.allocate_slice(buff_size).unwrap();
+            // let buff_size = (verticies.len() * size_of::<BlockVertex>()) as u64;
 
             // copied
             // https://docs.rs/vulkano/latest/src/vulkano/buffer/mod.rs.html#268-296
             // because man this is giving me a headache
-            let mut write_guard = subbuffer.write().unwrap();
 
-            for (o, i) in write_guard.iter_mut().zip(verticies) {
-                *o = i;
-            }
+            let subbuffer: Subbuffer<[BlockVertex]> = Buffer::from_iter(
+                self.memory_allocator.clone().unwrap(),
+                chunk_vertex_buffer_create_info,
+                chunk_vertex_buffer_allocation_info,
+                verticies,
+            )
+            .unwrap();
 
             self.chunk_vertex_buffers
                 .insert(*last_chunk_pos, subbuffer.clone());
