@@ -23,7 +23,9 @@ use vulkano::descriptor_set::layout::DescriptorSetLayout;
 use vulkano::device::DeviceOwned;
 use vulkano::image::sampler::Sampler;
 use vulkano::image::view::ImageView;
-use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
+use vulkano::memory::allocator::{
+    AllocationCreateInfo, MemoryAllocatePreference, MemoryTypeFilter, StandardMemoryAllocator,
+};
 use vulkano::pipeline::graphics::input_assembly::PrimitiveTopology;
 use vulkano::pipeline::graphics::viewport::Viewport;
 use vulkano::{DeviceSize, pipeline};
@@ -211,13 +213,7 @@ impl GameScene {
         // let vertical_render_distance = UserSettings::instance().vertical_render_distance;
 
         for (_pos, buff) in self.chunk_vertex_buffers.clone() {
-            // let mut write_guard = buff.write().unwrap();
-
             drop(buff);
-
-            // for o in write_guard.iter_mut() {
-            //     *o = BlockVertex::ZERO;
-            // }
         }
         self.chunk_vertex_buffers.clear();
 
@@ -248,6 +244,7 @@ impl GameScene {
 
         // dumb asf that i gotta put an `if let` inside but eh
         for (chunk_pos, chunk_mesh) in chunk_meshes {
+            let chunk_start_time = Instant::now();
             if let Some(chunk_mesh) = chunk_mesh {
                 temp_final_chunk_pos = Some(chunk_pos);
                 let mut chunk_verticies: Vec<BlockVertex> = vec![];
@@ -262,27 +259,31 @@ impl GameScene {
                 if current_chunk_pos[1] >= chunk_pos[1] {
                     chunk_verticies.append(&mut chunk_mesh.y_pos.clone());
                 }
-                if current_chunk_pos[1] >= chunk_pos[1] {
+                if current_chunk_pos[1] <= chunk_pos[1] {
                     chunk_verticies.append(&mut chunk_mesh.y_neg.clone());
                 }
 
                 if current_chunk_pos[2] >= chunk_pos[2] {
                     chunk_verticies.append(&mut chunk_mesh.z_pos.clone());
                 }
-                if current_chunk_pos[2] >= chunk_pos[2] {
+                if current_chunk_pos[2] <= chunk_pos[2] {
                     chunk_verticies.append(&mut chunk_mesh.z_neg.clone());
                 }
 
-                println!(
-                    "current size of {}, max of {}",
-                    (chunk_verticies.len() + verticies.len()) * 3 * size_of::<BlockVertex>(),
-                    self.max_buffer_size.unwrap()
-                );
+                // println!(
+                //     "current size of {}, max of {}",
+                //     (chunk_verticies.len() + verticies.len()) * size_of::<BlockVertex>(),
+                //     self.max_buffer_size.unwrap()
+                // );
 
-                if ((chunk_verticies.len() + verticies.len()) * 300 * size_of::<BlockVertex>())
+                if ((chunk_verticies.len() + verticies.len()) * size_of::<BlockVertex>())
                     < self.max_buffer_size.unwrap() as usize
                 {
                     verticies.append(&mut chunk_verticies);
+                    println!(
+                        "took {:?} to add the verts to the staging buff",
+                        chunk_start_time.elapsed()
+                    );
                 } else {
                     // let buff_size = (verticies.len() * size_of::<BlockVertex>()) as u64;
 
@@ -294,23 +295,22 @@ impl GameScene {
                     )
                     .unwrap();
 
-                    // copied
-                    // https://docs.rs/vulkano/latest/src/vulkano/buffer/mod.rs.html#268-296
-                    // because man this is giving me a headache
-
                     verticies = chunk_verticies;
 
                     self.chunk_vertex_buffers
                         .insert(*chunk_pos, subbuffer.clone());
+
+                    println!(
+                        "took {:?} to create a buff with all the verts",
+                        chunk_start_time.elapsed()
+                    );
                 }
             }
         }
         if let Some(last_chunk_pos) = temp_final_chunk_pos {
             // let buff_size = (verticies.len() * size_of::<BlockVertex>()) as u64;
 
-            // copied
-            // https://docs.rs/vulkano/latest/src/vulkano/buffer/mod.rs.html#268-296
-            // because man this is giving me a headache
+            let buff_create_start_time = Instant::now();
 
             let subbuffer: Subbuffer<[BlockVertex]> = Buffer::from_iter(
                 self.memory_allocator.clone().unwrap(),
@@ -322,7 +322,12 @@ impl GameScene {
 
             self.chunk_vertex_buffers
                 .insert(*last_chunk_pos, subbuffer.clone());
+            println!(
+                "It took {:?} to create a buffer",
+                buff_create_start_time.elapsed()
+            );
         }
+
         println!(
             "It took {:?} to update the vtx buffers",
             start_time.elapsed()
