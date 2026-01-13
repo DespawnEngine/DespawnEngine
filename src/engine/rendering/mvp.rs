@@ -36,12 +36,20 @@ impl Default for MVP {
         Self {
             model: Mat4::IDENTITY.into(),
             view: Mat4::IDENTITY.into(),
-            proj: Mat4::perspective_rh_gl(80.0f32.to_radians(), 1.0, 0.01, 2000.0).into(),
+            proj: Mat4::perspective_rh(80.0f32.to_radians(), 1.0, 0.01, 2000.0).into(),
         }
     }
 }
 
 impl MVP {
+    pub fn from_aspect_ratio(aspect_raio: f32) -> Self {
+        Self {
+            model: Mat4::IDENTITY.into(),
+            view: Mat4::IDENTITY.into(),
+            proj: Mat4::perspective_rh(80.0f32.to_radians(), aspect_raio, 0.01, 2000.0).into(),
+        }
+    }
+
     pub fn apply_camera_transforms(&self, camera: Camera) -> Self {
         let translation = Mat4::from_translation(-camera.position);
         let rotation = Mat4::from_quat(camera.rotation_quat.conjugate());

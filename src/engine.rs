@@ -1,5 +1,6 @@
 pub mod core;
 pub mod rendering;
-pub mod ui;
-mod scenes;
 pub(crate) mod resources;
+mod scenes;
+pub mod ui;
+pub mod window_info;

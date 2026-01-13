@@ -1,11 +1,9 @@
 use crate::arguments;
-use crate::engine::rendering::vertex::BlockVertex;
+use crate::engine::window_info::WindowInfo;
 use image::GenericImageView;
 use std::sync::Arc;
-use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer};
 use vulkano::device::Device;
 use vulkano::format::Format;
-use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
 use vulkano::render_pass::RenderPass;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Icon, Window};
@@ -16,8 +14,12 @@ use crate::engine::rendering::vswapchain::IMAGE_FORMAT;
 // This display script will contain almost all window functionality later, hopefully. Need to make sure I didn't break linux though first.
 // Creating the main window with definitions
 pub fn create_main_window(event_loop: &ActiveEventLoop) -> Arc<Window> {
+    let window_title = "Despawn Engine";
+
+    WindowInfo::set_title(window_title.into());
+
     let window_attributes = Window::default_attributes()
-        .with_title("Despawn Engine")
+        .with_title(window_title)
         .with_decorations(arguments::use_decorations())
         .with_window_icon(Some(load_icon("assets/icon.png")));
     Arc::new(event_loop.create_window(window_attributes).unwrap())

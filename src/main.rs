@@ -1,13 +1,18 @@
 mod arguments;
+mod content;
 mod engine;
 mod utils;
-mod content;
 
 use engine::core::app::App;
-use winit::event_loop::{ControlFlow, EventLoop, EventLoopBuilder};
+use winit::{
+    event_loop::{ControlFlow, EventLoop, EventLoopBuilder},
+    platform::{wayland::EventLoopExtWayland, x11::EventLoopExtX11},
+};
 
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly"))]
 use winit::platform::{wayland::EventLoopBuilderExtWayland, x11::EventLoopBuilderExtX11};
+
+use crate::{arguments::Backends, engine::window_info::WindowInfo};
 
 fn main() {
     // Use an EventLoopBuilder for more control over the EventLoop
@@ -35,6 +40,13 @@ fn main() {
     // Use `Poll` for a continuous loop, ideal for game rendering,
     // rather than waiting for OS events.
     event_loop.set_control_flow(ControlFlow::Poll);
+
+    // can't set via passed arguments because defaults exist :(
+    if event_loop.is_wayland() {
+        WindowInfo::set_backend(Backends::Wayland);
+    } else if event_loop.is_x11() {
+        WindowInfo::set_backend(Backends::X11);
+    }
 
     let mut app = App::default();
     let _ = event_loop.run_app(&mut app);

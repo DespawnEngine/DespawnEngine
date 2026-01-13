@@ -2,8 +2,8 @@ use std::sync::Arc;
 use vulkano::{
     VulkanLibrary,
     device::{
-        Device, DeviceCreateInfo, DeviceExtensions, Queue, QueueCreateInfo, QueueFlags,
-        physical::PhysicalDeviceType,
+        Device, DeviceCreateInfo, DeviceExtensions, DeviceFeatures, Queue, QueueCreateInfo,
+        QueueFlags, physical::PhysicalDeviceType,
     },
     instance::{Instance, InstanceCreateFlags, InstanceCreateInfo},
     swapchain::Surface,
@@ -35,6 +35,10 @@ pub fn create_device_and_queue(
         khr_swapchain: true,
         ..Default::default()
     };
+    let device_features = DeviceFeatures {
+        multi_viewport: true,
+        ..Default::default()
+    };
 
     // Select a physical device that supports our requirements.
     let (physical_device, queue_family_index) = instance
@@ -42,6 +46,7 @@ pub fn create_device_and_queue(
         .expect("Could not enumerate physical devices")
         // Must support swapchains.
         .filter(|p| p.supported_extensions().contains(&device_extensions))
+        .filter(|p| p.supported_features().contains(&device_features))
         // Must have a queue family that supports graphics and can draw to our surface.
         .filter_map(|p| {
             p.queue_family_properties()
@@ -69,6 +74,7 @@ pub fn create_device_and_queue(
         physical_device,
         DeviceCreateInfo {
             enabled_extensions: device_extensions,
+            enabled_features: device_features,
             queue_create_infos: vec![QueueCreateInfo {
                 queue_family_index,
                 ..Default::default()

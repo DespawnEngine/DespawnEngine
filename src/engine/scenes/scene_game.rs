@@ -1,21 +1,21 @@
-use crate::content::world;
-use crate::content::world::chunks::chunk::{self, BLOCKS_IN_CHUNK, CHUNK_SIZE, Chunk, ChunkCoords};
+use crate::content::block::block::Block;
+use crate::content::world::chunks::chunk::{CHUNK_SIZE, Chunk, ChunkCoords};
 use crate::content::world::chunks::chunk_mesh::{self, ChunkMesh};
 use crate::content::world::world::World;
-use crate::engine::core::content_loader::GameContent;
 use crate::engine::core::input::InputState;
 use crate::engine::core::user_settings::UserSettings;
 use crate::engine::rendering::camera::Camera;
 use crate::engine::rendering::descriptor_helpers::make_mvp_descriptor_set;
 use crate::engine::rendering::texture_atlas::AtlasUV;
 use crate::engine::rendering::vertex::BlockVertex;
+use crate::engine::rendering::vertex_buffer::{VERTEX_BUFFER_MAX_LEN, VertexBuffer};
 use crate::engine::scenes::handling::scene_trait::{Scene, SceneResources};
 use rapidhash::RapidHashMap;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Instant;
-use vulkano::buffer::allocator::{SubbufferAllocator, SubbufferAllocatorCreateInfo};
-use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer, subbuffer};
+use vulkano::DeviceSize;
+use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, PrimaryAutoCommandBuffer};
 use vulkano::descriptor_set::DescriptorSet;
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
@@ -23,12 +23,8 @@ use vulkano::descriptor_set::layout::DescriptorSetLayout;
 use vulkano::device::DeviceOwned;
 use vulkano::image::sampler::Sampler;
 use vulkano::image::view::ImageView;
-use vulkano::memory::allocator::{
-    AllocationCreateInfo, MemoryAllocatePreference, MemoryTypeFilter, StandardMemoryAllocator,
-};
-use vulkano::pipeline::graphics::input_assembly::PrimitiveTopology;
+use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
 use vulkano::pipeline::graphics::viewport::Viewport;
-use vulkano::{DeviceSize, pipeline};
 
 pub struct GameScene {
     pub world: Option<World>,
@@ -123,29 +119,27 @@ impl Scene for GameScene {
             .properties()
             .max_vertex_input_bindings;
 
-        let vtx_buffers: Vec<Subbuffer<[BlockVertex]>> =
-            self.chunk_vertex_buffers.values().cloned().collect();
+        // let vtx_buffers: Vec<Subbuffer<[BlockVertex; 1024 * 1024 / size_of::<BlockVertex>()]>> =
+        //     self.chunk_vertex_buffers.values().collect();
 
         // println!(
         //     "there are {} bufs, chunked into chunks of {max_vertex_input_bindings}",
         //     vtx_buffers.iter().len()
         // );
 
-        if !vtx_buffers.is_empty() {
-            for buffer in vtx_buffers {
-                let buffer_vtx_count = buffer.len();
-
-                builder
-                    .bind_pipeline_graphics(pipeline.clone())
-                    .unwrap()
-                    .bind_vertex_buffers(0, buffer)
-                    .unwrap();
-
-                unsafe {
-                    builder.draw(buffer_vtx_count as u32, 1, 0, 0).unwrap();
-                }
-            }
-        }
+        // if !vtx_buffers.is_empty() {
+        //     for buffer in vtx_buffers {
+        //         builder
+        //             .bind_pipeline_graphics(pipeline.clone())
+        //             .unwrap()
+        //             .bind_vertex_buffers(0, buffer)
+        //             .unwrap();
+        //
+        //         unsafe {
+        //             builder.draw(VERTEX_BUFFER_MAX_LEN as u32, 1, 0, 0).unwrap();
+        //         }
+        //     }
+        // }
     }
 
     fn create_mvp_descriptor_set(
@@ -240,7 +234,7 @@ impl GameScene {
 
         let mut temp_final_chunk_pos = None;
 
-        let mut verticies: Vec<BlockVertex> = vec![];
+        let mut pre_vtx_buff: VertexBuffer = VertexBuffer::new();
 
         // dumb asf that i gotta put an `if let` inside but eh
         for (chunk_pos, chunk_mesh) in chunk_meshes {
@@ -270,63 +264,29 @@ impl GameScene {
                     chunk_verticies.append(&mut chunk_mesh.z_neg.clone());
                 }
 
-                // println!(
-                //     "current size of {}, max of {}",
-                //     (chunk_verticies.len() + verticies.len()) * size_of::<BlockVertex>(),
-                //     self.max_buffer_size.unwrap()
-                // );
-
-                if ((chunk_verticies.len() + verticies.len()) * size_of::<BlockVertex>())
-                    < self.max_buffer_size.unwrap() as usize
-                {
-                    verticies.append(&mut chunk_verticies);
-                    println!(
-                        "took {:?} to add the verts to the staging buff",
-                        chunk_start_time.elapsed()
-                    );
-                } else {
-                    // let buff_size = (verticies.len() * size_of::<BlockVertex>()) as u64;
-
-                    let subbuffer: Subbuffer<[BlockVertex]> = Buffer::from_iter(
-                        self.memory_allocator.clone().unwrap(),
-                        chunk_vertex_buffer_create_info.clone(),
-                        chunk_vertex_buffer_allocation_info.clone(),
-                        verticies,
-                    )
-                    .unwrap();
-
-                    verticies = chunk_verticies;
-
-                    self.chunk_vertex_buffers
-                        .insert(*chunk_pos, subbuffer.clone());
-
-                    println!(
-                        "took {:?} to create a buff with all the verts",
-                        chunk_start_time.elapsed()
-                    );
-                }
+                pre_vtx_buff.add_chunk_mesh(*chunk_pos, chunk_verticies);
             }
         }
-        if let Some(last_chunk_pos) = temp_final_chunk_pos {
-            // let buff_size = (verticies.len() * size_of::<BlockVertex>()) as u64;
-
-            let buff_create_start_time = Instant::now();
-
-            let subbuffer: Subbuffer<[BlockVertex]> = Buffer::from_iter(
-                self.memory_allocator.clone().unwrap(),
-                chunk_vertex_buffer_create_info,
-                chunk_vertex_buffer_allocation_info,
-                verticies,
-            )
-            .unwrap();
-
-            self.chunk_vertex_buffers
-                .insert(*last_chunk_pos, subbuffer.clone());
-            println!(
-                "It took {:?} to create a buffer",
-                buff_create_start_time.elapsed()
-            );
-        }
+        // if let Some(last_chunk_pos) = temp_final_chunk_pos {
+        //     // let buff_size = (verticies.len() * size_of::<BlockVertex>()) as u64;
+        //
+        //     let buff_create_start_time = Instant::now();
+        //
+        //     let subbuffer: Subbuffer<[BlockVertex]> = Buffer::from_iter(
+        //         self.memory_allocator.clone().unwrap(),
+        //         chunk_vertex_buffer_create_info,
+        //         chunk_vertex_buffer_allocation_info,
+        //         verticies,
+        //     )
+        //     .unwrap();
+        //
+        //     self.chunk_vertex_buffers
+        //         .insert(*last_chunk_pos, subbuffer.clone());
+        //     println!(
+        //         "It took {:?} to create a buffer",
+        //         buff_create_start_time.elapsed()
+        //     );
+        // }
 
         println!(
             "It took {:?} to update the vtx buffers",

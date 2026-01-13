@@ -1,4 +1,5 @@
 use rapidhash::RapidHashMap;
+use std::collections::HashSet;
 use std::ops::Not;
 use std::sync::Arc;
 use std::time::Instant;
@@ -9,9 +10,9 @@ use vulkano::descriptor_set::WriteDescriptorSet;
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocatorCreateInfo;
 use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter};
-use vulkano::pipeline::Pipeline;
 use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
 use vulkano::pipeline::graphics::depth_stencil::DepthStencilState;
+use vulkano::pipeline::{DynamicState, Pipeline};
 use vulkano::{
     Validated, VulkanError,
     buffer::Subbuffer,
@@ -60,6 +61,7 @@ use crate::engine::ui::egui_integration::EguiStruct;
 use crate::engine::core::content_loader::GameContent;
 use crate::engine::rendering::texture_atlas::AtlasUV;
 use crate::engine::scenes::handling::scene_trait::SceneResources;
+use crate::engine::window_info::WindowInfo;
 
 //
 // `App` holds the state of the application, including all Vulkan objects that need to persist between frames.
@@ -249,11 +251,7 @@ impl App {
         let fs = fs::load(self.device.as_ref().unwrap().clone())
             .expect("failed to create shader module");
 
-        let viewport = Viewport {
-            offset: [0.0, 0.0],
-            extent: [1024.0, 1024.0],
-            depth_range: 0.0..=1.0,
-        };
+        let dynamic_state = foldhash::HashSet::from_iter([DynamicState::Viewport]);
 
         // Creating the graphics pipeline
         let pipeline = {
@@ -286,9 +284,10 @@ impl App {
                     depth_stencil_state: Some(depth_stencil_state),
                     input_assembly_state: Some(InputAssemblyState::default()),
                     viewport_state: Some(ViewportState {
-                        viewports: [viewport].into_iter().collect(),
+                        viewports: [Viewport::default()].into_iter().collect(),
                         ..Default::default()
                     }),
+                    dynamic_state,
                     rasterization_state: Some(RasterizationState {
                         cull_mode: vulkano::pipeline::graphics::rasterization::CullMode::Back,
                         ..Default::default()
@@ -304,7 +303,7 @@ impl App {
             )
             .unwrap()
         };
-        self.pipeline = Some(pipeline.clone()); // store
+        self.pipeline = Some(pipeline.clone());
 
         let descriptor_set_allocator = Arc::new(StandardDescriptorSetAllocator::new(
             self.device.as_ref().unwrap().clone(),
@@ -573,9 +572,15 @@ impl ApplicationHandler for App {
                 let command_buffer_allocator = self.command_buffer_allocator.as_ref().unwrap();
                 if self.recreate_swapchain {
                     let image_extent: [u32; 2] = window.inner_size().into();
+                    WindowInfo::set_resolution(image_extent.clone());
                     if image_extent.contains(&0) {
                         return;
                     }
+                    self.viewport = Viewport {
+                        offset: [0.0, 0.0],
+                        extent: [image_extent[0] as f32, image_extent[1] as f32],
+                        depth_range: 0.0..=1.0,
+                    };
                     let (new_swapchain, new_images) =
                         match swapchain.recreate(swapchain::SwapchainCreateInfo {
                             image_extent,
@@ -633,6 +638,8 @@ impl ApplicationHandler for App {
                 .unwrap();
 
                 cmd_buffer_builder
+                    .set_viewport(0, [self.viewport.clone(), Viewport::default()].into())
+                    .unwrap()
                     .begin_render_pass(
                         RenderPassBeginInfo {
                             clear_values: vec![

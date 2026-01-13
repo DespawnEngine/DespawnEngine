@@ -1,9 +1,10 @@
+pub mod camera;
+pub(crate) mod cube;
+pub(crate) mod descriptor_helpers;
 pub mod display;
+pub mod mvp;
+pub(crate) mod texture_atlas;
+pub mod vertex;
+pub(crate) mod vertex_buffer;
 pub mod vswapchain;
 pub mod vulkan;
-pub mod vertex;
-pub mod mvp;
-pub mod camera;
-pub(crate) mod descriptor_helpers;
-pub(crate) mod cube;
-pub(crate) mod texture_atlas;

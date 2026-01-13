@@ -368,7 +368,7 @@ pub const TOP_FACE: [BlockVertex; 6] = [
 pub fn create_cube_vertex_buffer(
     allocator: Arc<StandardMemoryAllocator>,
 ) -> Subbuffer<[BlockVertex]> {
-    let vertices = CUBE_VERTICES.clone();
+    let vertices = CUBE_VERTICES;
 
     Buffer::from_iter(
         allocator,

@@ -23,10 +23,7 @@ pub fn create_swapchain(
         .surface_capabilities(&surface, Default::default())
         .unwrap();
 
-    // TODO: this causes a crash on some wayland compositors, there needs to be a fallback option
     let present_mode: PresentMode = PresentMode::Immediate;
-
-    // Force linear format
 
     Swapchain::new(
         device.clone(),
