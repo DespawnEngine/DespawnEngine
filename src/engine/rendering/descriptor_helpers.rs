@@ -24,8 +24,6 @@ pub fn make_mvp_descriptor_set(
 
     let aspect_ratio: f32 = image_extent[0] as f32 / image_extent[1] as f32;
 
-    println!("{image_extent:?}");
-
     let mvp = MVP::from_aspect_ratio(aspect_ratio).apply_camera_transforms(*camera);
 
     // let mvp = MVP::default().apply_camera_transforms(*camera);
